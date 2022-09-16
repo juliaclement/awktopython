@@ -1,0 +1,5 @@
+Line.1
+Line.2 -- Duplicated
+Line.3
+Line.4 -- Don't go here
+Line.2
