@@ -214,6 +214,7 @@ class AwkpyRuntimeVarOwner():
         value=array.get(key,AwkEmptyVarInstance) # AWK doc says this should be an empty string but that can then be treated as 0
         array[key]=value-1
         return value
+
     def _substr(self, string:str, start:int, length:int=None) -> str:
         if start<1:
             start=1
@@ -227,9 +228,7 @@ class AwkpyRuntimeVarOwner():
 
     def _to_array(self,list,offset=1):
         """Python has lists & dicts. AWK only has dict like Arrays"""
-        ans=defaultdict(AwkEmptyVar)
-        for i in range(len(list)):
-            ans[i+offset] = list[i]
+        ans=defaultdict(AwkEmptyVar,zip(range(offset,len(list)+offset),list))
         return ans
 
     def __init__(self):
@@ -267,6 +266,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             Typically used for any clean-up and printing summaries.
         """
         pass
+
     def _get_stdin(self):
             self.FNR=0
             self.FILENAME = '-'
@@ -290,8 +290,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             namespace=optn[0]
             setvar = optn[1]
             if namespace != 'awk':
-                print(f"{arg}: Namespaces not implemented yet")
-                exit(1)
+                raise SyntaxError( f"{arg}: Namespaces in -v not implemented")
         # HEURISTIC: if the value is a number, convert it to one
         # Damned if I know if this is the correct thing to do
         # it duplicates what we do in the compiler so if we change
@@ -323,7 +322,11 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                         self.NF=0
                         self.BEGINFILE()
                         with open(self.FILENAME) as current_file:
-                            yield from current_file
+                            for line in current_file:
+                                yield line
+                                if self._nextfile:
+                                    current_file.close()
+                                    break;
                         self.ENDFILE()
     def _run(self,argv):
         options=[]
@@ -341,7 +344,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             if self._has_mainloop: # only process files and run mainloop if it has some statements
                 for line in self._get_lines():
                     # Can't find how to advance to the next file in the generator
-                    # so just consume lines. YUCK!
+                    # when reading stdin, so just consume lines. YUCK!
                     # Possible solution https://stackoverflow.com/questions/3164785/stop-generator-from-within-block-in-python
                     if self._nextfile:
                         continue
@@ -372,13 +375,14 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         return AwkpyRuntimeWrapper._ans
     def __init__(self):
         super().__init__()
-        self.NR = 0
-        self.FNR = 0
-        self.NF = 0
-        self.FS = ' '
-        self.OFS='\t'
         self.ARGC=0
         self.ARGV=[]
+        self.FILENAME=''
+        self.FNR = 0
+        self.FS = ' '
+        self.NF = 0
+        self.NR = 0
+        self.OFS='\t'
         self._nextfile=False
         # if no statements are present in the main loop, 
         # input files are not processed

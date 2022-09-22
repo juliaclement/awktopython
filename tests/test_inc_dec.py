@@ -155,3 +155,26 @@ BEGIN {
     b=--a
     exit a*100+b
 }""")
+
+''' The following methods check that if an unknown variable is
+    presented, at least the runtime doesn't crash.
+    The compiler shouldn't be able to create these conditions
+    so we just go straight to the runtime
+'''
+from awkpy_runtime import AwkpyRuntimeVarOwner
+
+def test_post_dec_var_unknown():
+    a=AwkpyRuntimeVarOwner()
+    assert a._post_dec_var('balderdash') == 0
+
+def test_pre_dec_var_unknown():
+    a=AwkpyRuntimeVarOwner()
+    assert a._pre_dec_var('balderdash') == -1
+
+def test_post_inc_var_unknown():
+    a=AwkpyRuntimeVarOwner()
+    assert a._post_inc_var('balderdash') == 0
+
+def test_pre_inc_var_unknown():
+    a=AwkpyRuntimeVarOwner()
+    assert a._pre_inc_var('balderdash') == 1

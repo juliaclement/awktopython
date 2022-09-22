@@ -96,6 +96,8 @@ class Sym():
         return False
     def is_terminator(self):
         return False
+    def is_variable(self):
+        return self.sym_type == SymType.VARIABLE
 
 class SymOperator(Sym):
     """Symbol table entry for operators"""
@@ -105,6 +107,27 @@ class SymOperator(Sym):
 
     def is_operator(self):
         return True
+
+class SymVariable(Sym):
+    """Symbol table entry for variable, build-in or user defined"""
+    def __init__(self, token:str, sym_type:SymType=SymType.VARIABLE, \
+                 awk_priority:int=10000, python_priority:int=10000,python_equivalent=None, built_in=False):
+        if python_equivalent is None:
+            python_equivalent = 'self.'+token
+        super().__init__(token, sym_type, awk_priority, python_priority, python_equivalent)
+        self.built_in = built_in
+
+    def is_operator(self):
+        return False
+
+    def is_operand(self):
+        return True
+        
+    def is_variable(self):
+        return True
+        
+    def is_built_in(self):
+        return self.built_in
 
 class SymBinaryOperator(SymOperator):
     """Symbol table entry for operators"""
@@ -253,7 +276,7 @@ class AwkPyCompiler():
                     if token[0] in '1234567890':
                         sym=Sym(token,SymType.NUMBER)
                     elif token[0].isalpha() and token.isalnum():
-                        sym=Sym(token,SymType.VARIABLE,python_equivalent='self.'+token)
+                        sym=SymVariable(token,python_equivalent='self.'+token)
                     elif token[0]=='"':
                         sym=Sym(token.replace(chr(1),'\\"'),SymType.STRING)
                     elif token[0].isspace():
@@ -499,10 +522,7 @@ class AwkPyCompiler():
                     self.advance_token()
                     last_array_index=self.compile_expression()
                     self.advance_token() # dispose ]
-                    if self.current_token.token == '=':
-                        ans.append('['+last_array_index+']')
-                    else:
-                        ans.append(f'.get({last_array_index},AwkEmptyVarInstance)')
+                    ans.append('['+last_array_index+']')
                 elif self.current_token.token in ['++','--']: #post_inc / post_dec
                     op=self.current_token.token
                     if self.prior_token.sym_type==SymType.VARIABLE:
@@ -534,9 +554,17 @@ class AwkPyCompiler():
                         ans.append('-')
                         ans.append(self.current_token.token[1:])
                     else:
-                        # two operators together. String concatenation? Let Python sort it out
-                        ans.append('+'+self.current_token.python_equivalent)
-                    self.advance_token()
+                        # two operands together. String concatenation? Let's hope so
+                        lhs = ans.pop()
+                        while lhs[0] in '.[': # rejoin array lookups
+                            lhs=ans.pop()+lhs
+                        if self.lookahead_token.sym_type == SymType.LEFT_BRACKET:
+                            rhs=self.compile_expression(extra_terminators)
+                        else:
+                            rhs=self.current_token.python_equivalent
+                        ans.append(f'(str({lhs})+str({rhs}))')
+                    if not self.current_token.is_terminator():
+                        self.advance_token()
                 else:
                     self.syntax_error("operator")
             elif self.prior_token.is_operator():
@@ -927,11 +955,10 @@ class AwkPyCompiler():
                         namespace=optn[0]
                         setvar = optn[1]
                         if namespace != 'awk':
-                            print(f"{arg}: Namespaces in -v not implemented")
-                            exit(1)
+                            raise SyntaxError( f"{arg}: Namespaces in -v not implemented")
                     sym=self.syms.get(setvar,None)
                     if sym is None:
-                        sym=Sym(setvar, SymType.VARIABLE, python_equivalent='self.'+setvar)
+                        sym=SymVariable(setvar, python_equivalent='self.'+setvar)
                         self.syms[setvar]=sym
                     # HEURISTIC: if the value is a number, leave it and let Python
                     # convert it to one
@@ -988,7 +1015,7 @@ class AwkPyCompiler():
         if self._has_mainloop:
             self.output_line("self._has_mainloop = True")
         for name,sym in self.syms.items():
-            if sym.sym_type == SymType.VARIABLE:
+            if sym.is_variable() and not sym.is_built_in():
                 self.output_line(f'{sym.python_equivalent}={sym.init}')
 
         if self.do_debug:
@@ -1132,6 +1159,18 @@ class AwkPyCompiler():
                 # body = 3
                 Sym('ENDFILE', SymType.SECTION, 4),
                 Sym('END', SymType.SECTION, 5),
+            #
+            #   Built-in variables
+            #
+                SymVariable('ARGC',built_in=True),
+                SymVariable('ARGV',built_in=True),
+                SymVariable('FILENAME',built_in=True),
+                SymVariable('FNR',built_in=True),
+                SymVariable('FS',built_in=True),
+                SymVariable('NF',built_in=True),
+                SymVariable('NR',built_in=True),
+                SymVariable('OFS',built_in=True),
+                # To implement ARGIND, CONVFMT, ERRNO, ENVIRON, FILENAME, FUNCTAB, OFMT, ORS, RLENGTH, RS, RSTART, SUBSEP,SYMTAB
                 #functions = ??
                 #__init__ = ??
                 Sym('EndOfInput',SymType.END_OF_INPUT),
@@ -1152,6 +1191,30 @@ if __name__=="__main__":
     x="123./456..789.101112"
     split(x,y,"./")
     exit y[1]
+    }'''
+    source=r'''BEGIN {
+    a="<>"
+    b = a a
+    print b
+    }'''
+    source=r'''BEGIN {
+    a="<>"
+    print a a
+    }'''
+    source=r'''BEGIN {
+    a[1]="<>"
+    print a[1] a[1]
+    }'''
+    source=r'''BEGIN {
+    a[1]="<>"
+    b = a[1] a[1]
+    print b
+    }'''
+    source=r'''END {
+    OFS="-"
+    l="left";
+    r="right";
+    print l,r
     }'''
     a=AwkPyCompiler()
     code=a.compile(source)

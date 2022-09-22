@@ -55,8 +55,9 @@ Restrict arg names to not the same as a function name: planned, low
 priority
 
 nawk & gawk but not POSIX allow “func” as an alias of “function”. It
-would be a 1 line change in the parser, I’m considering if I want to do
-it
+would be a 1 line change in the parser, but the POSIX standard includes
+this “This has been deprecated by the authors of the language, who asked
+that it not be specified.” so I probably won’t
 
 The POSIX standard says 
 
@@ -87,9 +88,10 @@ block statement: ({ statement;statement;...}) (nawk) fully implemented
 
 **for**(initialiser, condition, incr) statement (nawk) fully implemented
 
-**print** (to stdout) (nawk) implemented, may not have all edge case
+**print** (to stdout) (nawk) implemented, may not have all edge cases
+implemented
 
-other I/O not implemented yet. Priority of each case needs t obe
+other I/O not implemented yet. Priority of each case needs to be
 determined.
 
 Expressions
@@ -112,10 +114,10 @@ Lexer
 As the first stage of compilation, the source programs are broken up
 into a series of tokens (names, strings, operators, etc.) by a routine
 known as the lexer. The current one is very bad & I doubt it correctly
-handles any but the simplest of patterns (/.../). It needs replacing,
-either a total rewrite or modify the parser available in the Python
-library. The rewrite would enable us to support namespaces and @include
-files.
+handles any but the simplest of patterns (/.../). **It needs
+replacing,** either a total rewrite or modify the parser available in
+the Python library. The rewrite would enable us to support namespaces
+and @include files.
 
 Conditions
 
@@ -167,7 +169,7 @@ asort, asorti. Unimplemented. Medium priority
 
 gensub. Unimplemented, low priority
 
-patsplit, strtonum. Unimplemented, uncertain
+patsplit, strtonum. Unimplemented, uncertain priority
 
 Built-in Variables
 

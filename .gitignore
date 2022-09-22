@@ -1,3 +1,13 @@
+# Personal Preferences
+ *.bak
+ *.odt
+ gen.py
+ try-it.py
+ tests/awkpy*py
+ 
+ #MS Code project folder
+ .vscode
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

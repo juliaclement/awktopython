@@ -38,9 +38,7 @@ def run(args):
         arg_parser.debug=True
     if arg_parser.debug:
         print(python_source)
-        if arg_parser.output_file_name:
-            print('-------------------------------------------')
+        if arg_parser.output_file_name: print('-------------------------------------------')
     return python_source
 
-if __name__=="__main__":
-    run(sys.argv)
+if __name__=="__main__": run(sys.argv)

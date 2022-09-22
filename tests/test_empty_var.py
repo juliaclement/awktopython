@@ -249,3 +249,6 @@ def test_empty_var_concat():
     a=AwkEmptyVar()
     b=a+"x"
     assert b=="x"
+
+def test_empty_var_repr():
+    assert AwkEmptyVar().__repr__() == 'AwkEmptyVar()'

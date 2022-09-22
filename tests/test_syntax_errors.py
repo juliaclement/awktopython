@@ -30,13 +30,16 @@ from awkpy_compiler import AwkPyCompiler
 
 def compile_catch( awk: str, expected=None):
     compiler=AwkPyCompiler(debug=False)
+    error_found=False
+    error_msg='No exception raised'
     try:
         compiler.compile(awk)
     except SyntaxError as err:
         print(err.msg)
-        assert True
-        return err.msg
-    assert False
+        error_found=True
+        error_msg=err.msg
+    assert error_found, error_msg
+    return error_msg
 
 def test_braces_closed():
     compile_catch('''$1=="" { xxxxx''')

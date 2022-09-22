@@ -1,0 +1,21 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            //"args" : ["-ogen.py", "-e", "BEGIN {x=\"123./456..789.101112\";split(x,y,\"./\"); for (a in y) { print a\" \"y[a]; } }"],
+            //"args" : ["-ogen.py", "-vABC=DEF", "-e", "BEGIN {print ABC}", "-e", "BEGIN {x=\"123./456..789.101112\";split(x,y,\"./\"); for (a in y) { print a\" \"y[a];} }",
+            //          "-e", "BEGIN {print \"Qrp\";}"],
+            //"args" : ["-v", "a=a", "BEGIN {q[1]=0} {q[$1]=$0; print a\" \"$0;}", "lines.txt", "a=xx", "lines.txt" ],
+            "args"   : ["/home/julia/Projects/python/awktopython/tests/lines.txt","-"]
+        }
+    ]
+}

@@ -21,8 +21,8 @@
 import pytest
 from pathlib import Path
 import math
-from awkpy_compiler import AwkPyCompiler
 from helpers import compile_run_answer_assert, compile_run_capsys_assert, compile_run, Fuzzy
+from awkpy_compiler import AwkPyCompiler
 
 def test_simple_function_call(capsys):
     compile_run_capsys_assert(capsys,"fnords.\n",'''
@@ -161,6 +161,37 @@ def test_substr_function_call_1():
     compile_run_answer_assert('3456','''
 BEGIN {y="123456"
     z=substr(y,3)
+    exit z
+}''')
+
+def test_substr_function_call_1_underflow_1():
+    compile_run_answer_assert('123456','''
+BEGIN {y="123456"
+    z=substr(y,-3)
+    exit z
+}''')
+
+def test_substr_function_call_1_underflow_2():
+    compile_run_answer_assert('123456','''
+BEGIN {y="123456"
+    w=-3
+    z=substr(y,w)
+    exit z
+}''')
+
+def test_substr_function_call_2_overflow_1():
+    compile_run_answer_assert('','''
+BEGIN {y="123456"
+    z=substr(y,8,6)
+    exit z
+}''')
+
+def test_substr_function_call_2_overflow_2():
+    compile_run_answer_assert('','''
+BEGIN {y="123456"
+    start=8
+    size=6
+    z=substr(y,start,size)
     exit z
 }''')
 

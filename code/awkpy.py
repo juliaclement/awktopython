@@ -61,7 +61,7 @@ def run(args):
     return AwkpyRuntimeWrapper._ans
 
 if __name__=="__main__":
-    #run(sys.argv)
-    file='/home/julia/Projects/python/awktopython/tests/lines.txt'
-    run(['awkpy_out','-v', 'A=File.1', '$1=="Line.4"{print A","$1}',file, 'A=File.2', file])
+    run(sys.argv)
+    #file='/home/julia/Projects/python/awktopython/tests/lines.txt'
+    #run(['awkpy_out','-v', 'A=File.1', '$1=="Line.4"{print A","$1}',file, 'A=File.2', file])
     exit(AwkpyRuntimeWrapper._ans)

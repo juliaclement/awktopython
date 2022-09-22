@@ -22,8 +22,8 @@ import io
 import pytest
 from pathlib import Path
 import math
-from awkpy_compiler import AwkPyCompiler
 from helpers import full_file_name, Fuzzy
+from awkpy_compiler import AwkPyCompiler
 import awkpy
 import awkpycc
 
@@ -81,6 +81,28 @@ BEGIN {
     fnord()
 }'''])
 
+def test_namespace_awk_compiler(capsys):
+    awkpy.run(['awkpy_out','-vawk::A=Z', '-v', 'awk::C=Y', 'BEGIN {print "A="A", C="C;}'])
+    captured = capsys.readouterr()
+    assert captured.out == 'A=Z, C=Y\n'
+
+def test_namespace_awk_runtime(capsys):
+    awkpy.run(['awkpy_out','-vawk::A=Z', '-v', 'awk::C=Y', 'BEGIN {print "A="A", C="C;}','-Wr','-vawk::A=B', '-v', 'awk::C=D'])
+    captured = capsys.readouterr()
+    assert captured.out == 'A=B, C=D\n'
+
+def test_namespace_bad_compiler(capsys):
+    try:
+        assert awkpy.run(['awkpy_out','-vbad::A=Z', '-v', 'awk::C=Y', 'BEGIN {print "A="A", C="C;}']) is False
+    except SyntaxError as err:
+        print(f"Error: {err}")
+
+def test_namespace_bad_runtime(capsys):
+    try:
+        assert awkpy.run(['awkpy_out','-vawk::A=Z', '-v', 'awk::C=Y', 'BEGIN {print "A="A", C="C;}','-Wr','-vbad::A=B', '-v', 'awk::C=D']) is False
+    except SyntaxError as err:
+        print(f"Error: {err}")
+
 def test_Wr_option(capsys):
     awkpy.run(['awkpy_out','-vA=Z', '-v', 'C=Y', 'BEGIN {print "A="A", C="C;}','-Wr','-vA=B', '-v', 'C=D'])
     captured = capsys.readouterr()
@@ -112,4 +134,4 @@ def test_use_stdin_ahead_of_files(capsys, monkeypatch):
     captured = capsys.readouterr()
     assert captured.out == "++\n--\n"
 
-if __name__=="__main__":     awkpy.run(['awkpy_out','-vA=Z', '-v', 'B=Y', 'BEGIN {print "A="A", B="B;}','-Wr','-vA=B', '-v', 'C=D'])
+if __name__=="__main__":   awkpy.run(['awkpy_out','-vA=Z', '-v', 'B=Y', 'BEGIN {print "A="A", B="B;}','-Wr','-vA=B', '-v', 'C=D'])

@@ -27,9 +27,15 @@ import pytest
 import re
 import random
 import math
+import sys
 from pathlib import Path
 from collections import defaultdict
-from awkpy import run
+try:
+    from awkpy import run
+except:
+    path=Path(__file__).parent.parent/'code'
+    sys.path.append(str(path))
+    from awkpy import run
 from awkpy_args import AwkPyArgParser
 from awkpy_compiler import AwkPyCompiler
 from awkpy_runtime import AwkEmptyVar,AwkEmptyVarInstance,AwkNextFile,AwkExit,AwkpyRuntimeWrapper,AwkpyRuntimeVarOwner

@@ -183,3 +183,28 @@ BEGIN {
     exit x
 }
     ''')
+
+def test_print_concat(capsys):
+    compile_run_capsys_assert(capsys,'<><>\n','''    
+BEGIN {
+    a="<>"
+    print a a
+}
+    ''')
+
+def test_array_concat_2_strs():
+    compile_run_answer_assert("<><>",'''
+BEGIN {
+    a[1]="<>"
+    b = a[1] a[1]
+    exit b
+}
+    ''')
+
+def test_print_concat_array_2(capsys):
+    compile_run_capsys_assert(capsys,'<><>\n','''
+BEGIN {
+    a[1]="<>"
+    print a[1] a[1]
+}
+    ''')
