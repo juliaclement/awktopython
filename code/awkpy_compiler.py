@@ -111,11 +111,13 @@ class SymOperator(Sym):
 class SymVariable(Sym):
     """Symbol table entry for variable, build-in or user defined"""
     def __init__(self, token:str, sym_type:SymType=SymType.VARIABLE, \
-                 awk_priority:int=10000, python_priority:int=10000,python_equivalent=None, built_in=False):
+                 awk_priority:int=10000, python_priority:int=10000,python_equivalent=None, built_in=False, array=False, scalar=False):
         if python_equivalent is None:
             python_equivalent = 'self.'+token
         super().__init__(token, sym_type, awk_priority, python_priority, python_equivalent)
         self.built_in = built_in
+        self.is_array=array
+        self.is_scalar=scalar
 
     def is_operator(self):
         return False
@@ -518,6 +520,7 @@ class AwkPyCompiler():
                     last_ans_len=len(ans)
                     # The same variable can't be both scalar & array in
                     # one program in AWK, so we just forcibly change the type
+                    self.prior_token.is_array=True
                     self.prior_token.init='defaultdict(AwkEmptyVar.instance)'
                     self.advance_token()
                     last_array_index=self.compile_expression()
@@ -743,11 +746,12 @@ class AwkPyCompiler():
         if self.current_token.sym_type == SymType.VARIABLE and \
             self.lookahead_token.token == 'in':
             # python style
-            var:Sym=self.current_token
+            var:SymVariable=self.current_token
             self.advance_token()
             self.advance_token_require(sym_types=[SymType.VARIABLE])
-            arr:Sym=self.current_token
+            arr:SymVariable=self.current_token
             arr.init='defaultdict(AwkEmptyVar.instance)'
+            arr.is_array=True
             self.output_line(f'for {var.python_equivalent} in {arr.python_equivalent}:')
             self.advance_token() # dispose of )
             self.advance_token()
@@ -807,8 +811,8 @@ class AwkPyCompiler():
             if self.current_token.sym_type == SymType.STRING:
                 text=self.current_token.python_equivalent[1:-1]
                 ans+=text
-            elif self.current_token.sym_type == SymType.VARIABLE and \
-                 self.current_token.init == 'defaultdict(AwkEmptyVar.instance)' and \
+            elif self.current_token.is_variable() and \
+                 self.current_token.is_array and \
                  self.lookahead_token.sym_type == SymType.LEFT_BRACKET:
                 var = self.current_token.python_equivalent
                 self.advance_token()
@@ -1014,9 +1018,13 @@ class AwkPyCompiler():
         self.output_line('super().__init__()')
         if self._has_mainloop:
             self.output_line("self._has_mainloop = True")
+
         for name,sym in self.syms.items():
-            if sym.is_variable() and not sym.is_built_in():
-                self.output_line(f'{sym.python_equivalent}={sym.init}')
+            if sym.is_variable():
+                if sym.is_array and sym.is_scalar:
+                    raise SyntaxError(f'{sym.token} is used as both an array and a scalar value')
+                if not sym.is_built_in():
+                    self.output_line(f'{sym.python_equivalent}={sym.init}')
 
         if self.do_debug:
             print([t.token for l,t in self.tokens])
@@ -1162,15 +1170,16 @@ class AwkPyCompiler():
             #
             #   Built-in variables
             #
-                SymVariable('ARGC',built_in=True),
-                SymVariable('ARGV',built_in=True),
-                SymVariable('FILENAME',built_in=True),
-                SymVariable('FNR',built_in=True),
-                SymVariable('FS',built_in=True),
-                SymVariable('NF',built_in=True),
-                SymVariable('NR',built_in=True),
-                SymVariable('OFS',built_in=True),
-                # To implement ARGIND, CONVFMT, ERRNO, ENVIRON, FILENAME, FUNCTAB, OFMT, ORS, RLENGTH, RS, RSTART, SUBSEP,SYMTAB
+                SymVariable('ARGC',built_in=True, scalar=True),
+                SymVariable('ARGV',built_in=True, array=True),
+                SymVariable('FILENAME',built_in=True, scalar=True),
+                SymVariable('FNR',built_in=True, scalar=True),
+                SymVariable('FS',built_in=True, scalar=True),
+                SymVariable('NF',built_in=True, scalar=True),
+                SymVariable('NR',built_in=True, scalar=True),
+                SymVariable('OFS',built_in=True, scalar=True),
+                SymVariable('ENVIRON',built_in=True, array=True),
+                # To implement ARGIND, CONVFMT, ERRNO, FUNCTAB, OFMT, ORS, RLENGTH, RS, RSTART, SUBSEP,SYMTAB
                 #functions = ??
                 #__init__ = ??
                 Sym('EndOfInput',SymType.END_OF_INPUT),
@@ -1215,6 +1224,9 @@ if __name__=="__main__":
     l="left";
     r="right";
     print l,r
+    }'''
+    source=r'''BEGIN {
+    print ENVIRON["PS2"]
     }'''
     a=AwkPyCompiler()
     code=a.compile(source)

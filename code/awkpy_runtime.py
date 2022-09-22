@@ -384,6 +384,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         self.NR = 0
         self.OFS='\t'
         self._nextfile=False
+        self.ENVIRON = defaultdict(AwkEmptyVar.instance,os.environ)
         # if no statements are present in the main loop, 
         # input files are not processed
         self._has_mainloop=False

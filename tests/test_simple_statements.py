@@ -19,6 +19,7 @@
 # limitations under the License.
 
 import pytest
+from os import environ
 from helpers import compile_run_answer_assert, compile_run_capsys_assert, full_file_name, check_arg_parser
 
 def test_simple_match(capsys):
@@ -206,5 +207,34 @@ def test_print_concat_array_2(capsys):
 BEGIN {
     a[1]="<>"
     print a[1] a[1]
+}
+    ''')
+
+def test_ENVIRON_found():
+    compile_run_answer_assert(environ['PATH'],'''
+BEGIN {
+    exit ENVIRON["PATH"]
+}
+    ''')
+
+def test_ENVIRON_not_found():
+    compile_run_answer_assert('xx','''
+BEGIN {
+    a="x" ENVIRON["AwkEmptyVar"] "x"
+    exit a
+}
+    ''')
+
+def test_print_ENVIRON_found(capsys):
+    compile_run_capsys_assert(capsys,environ['PATH']+'\n','''
+BEGIN {
+    print ENVIRON["PATH"]
+}
+    ''')
+
+def test_print_ENVIRON_not_found(capsys):
+    compile_run_capsys_assert(capsys,'xx\n','''
+BEGIN {
+    print "x" ENVIRON["AwkEmptyVar"] "x"
 }
     ''')

@@ -127,6 +127,12 @@ def test_use_var_between_files(capsys):
     captured = capsys.readouterr()
     assert captured.out == "File.1,Line.4\nFile.2,Line.4\n"
 
+def test_use_namespace_var_between_files(capsys):
+    file=str(full_file_name('lines.txt'))
+    awkpy.run(['awkpy_out','-v', 'A=File.1', '$1=="Line.4"{print A","$1}',file, 'awk::A=File.2', file])
+    captured = capsys.readouterr()
+    assert captured.out == "File.1,Line.4\nFile.2,Line.4\n"
+
 def test_use_stdin_ahead_of_files(capsys, monkeypatch):
     monkeypatch.setattr('sys.stdin', io.StringIO('Line.4 ++'))
     file=str(full_file_name('lines.txt'))
