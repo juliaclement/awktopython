@@ -22,10 +22,18 @@ import io
 import pytest
 from pathlib import Path
 import math
+import sys
 from helpers import full_file_name, Fuzzy
-from awkpy_compiler import AwkPyCompiler
-import awkpy
+try:
+    import awkpy
+except:
+    path=Path(__file__).parent.parent/'code'
+    sys.path.append(str(path))
+    import awkpy
+
 import awkpycc
+from awkpy_runtime import AwkpyRuntimeWrapper
+from awkpy_compiler import AwkPyCompiler
 
 def check_compile_to_disk(compiler, filename, value, check, args:list):
     if isinstance( args, str):
@@ -139,5 +147,17 @@ def test_use_stdin_ahead_of_files(capsys, monkeypatch):
     awkpy.run(['awkpy_out','$1=="Line.4"{print $2}','-',file])
     captured = capsys.readouterr()
     assert captured.out == "++\n--\n"
+
+def test_f_includes_files_twice():
+    path=Path(__file__).parent.parent/'tests'
+    file=str(path/'add_1_in_BEGIN.awk')
+    awkpy.run(['awkpy_out', '-f', file, '-f', file, '-e', 'BEGIN {exit a;}'])
+    assert AwkpyRuntimeWrapper._ans == 2
+
+def test_i_includes_files_once():
+    path=Path(__file__).parent.parent/'tests'
+    file=str(path/'add_1_in_BEGIN.awk')
+    awkpy.run(['awkpy_out', '-i', file, '-i', file, '-e', 'BEGIN {exit a;}'])
+    assert AwkpyRuntimeWrapper._ans == 1
 
 if __name__=="__main__":   awkpy.run(['awkpy_out','-vA=Z', '-v', 'B=Y', 'BEGIN {print "A="A", B="B;}','-Wr','-vA=B', '-v', 'C=D'])

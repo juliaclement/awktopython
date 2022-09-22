@@ -211,6 +211,7 @@ BEGIN {
     ''')
 
 def test_ENVIRON_found():
+    assert environ['PATH'] != ''
     compile_run_answer_assert(environ['PATH'],'''
 BEGIN {
     exit ENVIRON["PATH"]
@@ -226,6 +227,7 @@ BEGIN {
     ''')
 
 def test_print_ENVIRON_found(capsys):
+    assert environ['PATH'] != ''
     compile_run_capsys_assert(capsys,environ['PATH']+'\n','''
 BEGIN {
     print ENVIRON["PATH"]
@@ -238,3 +240,4 @@ BEGIN {
     print "x" ENVIRON["AwkEmptyVar"] "x"
 }
     ''')
+

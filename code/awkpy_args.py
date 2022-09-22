@@ -58,7 +58,7 @@ class AwkPyArgParser():
                 elif curr_arg[1] in 'if': # source file, include file
                     if len(curr_arg) == 2:
                         i+=1
-                        self.compiler_options.append('-f'+args[i])
+                        self.compiler_options.append(f'{curr_arg}{args[i]}')
                     else:
                         self.compiler_options.append(curr_arg)
                 elif curr_arg[1] == 'o': # Python source file output

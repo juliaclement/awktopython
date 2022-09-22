@@ -16,7 +16,7 @@ awk accepts a command line like “awk -f “prog1.awk” -f “prog2” ... dat
 the files are compiled in order and then produce a single execution
 unit.
 
-Gawk has a “-i” option which is like “-f” except each imported file is only imported once. The current awkpy implementation is to treat it exactly like “-f”. This should be fully implemented as a high priority.
+Gawk has a “-i” option which is like “-f” but will only include any given file once. Gawk will produce an error message if the same file is included through both -i & -f. Currently we just ignore the issue, should fix. Priority high.
 
 @include (gawk extension) unplanned. Would require major changes to the lexer.
 

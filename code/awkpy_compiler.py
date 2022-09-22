@@ -899,10 +899,17 @@ class AwkPyCompiler():
             self.output_line('if '+prog+':')
             self.compile_indented_statement()
 
-    #hook for testing without the final joining up
-    def compile_to_segments(self,source):
-        if len(source) > 2 and source[0:1] == '-f':
-            file = open('my_text_file',mode='r')
+    def compile_to_segments(self, source):
+        if len(source) > 2 and source[0:2] == '-f':
+            file = open(source[2:],mode='r')
+            source = file.read()
+            file.close()
+        elif len(source) > 2 and source[0:2] == '-i':
+            filename=source[2:]
+            if filename in self.included_files:
+                return
+            self.included_files.append(filename)
+            file = open(filename,mode='r')
             source = file.read()
             file.close()
         elif len(source) > 2 and source[0:2] == '-e':
@@ -915,7 +922,6 @@ class AwkPyCompiler():
         while self.current_token_nr < len(self.tokens) and \
             self.current_token.sym_type != SymType.END_OF_INPUT:
             self.compile_pattern_condition()
-
         return self.generated_code
 
     def parse_args(self, source ):
@@ -932,9 +938,18 @@ class AwkPyCompiler():
                     else: # end of options, ignore everything
                         i+=1
                         return files
+                if arg[1] == 'i':
+                    if len(arg) == 2:
+                        i+=1
+                        files.append('-i'+source[i])
+                    else:
+                        files.append(arg)
                 if arg[1] == 'f':
-                    i+=1
-                    files.append('-f'+source[i])
+                    if len(arg) == 2:
+                        i+=1
+                        files.append('-f'+source[i])
+                    else:
+                        files.append(arg)
                 elif arg[1] == 'e':
                         if len(arg)> 2:
                             files.append(arg[2:])
@@ -1071,6 +1086,7 @@ class AwkPyCompiler():
         default_function_parser=lambda t=[]: self.compile_generic_function_call(t)
         global default_function_method_parser
         default_function_method_parser=lambda t=[]: self.compile_function_call_to_method(t)
+        self.included_files=[]
         self.imported_libraries={}
         self.required_libraries={}
         self.required_library_items=defaultdict(dict) # dict of dicts
