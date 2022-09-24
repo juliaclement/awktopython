@@ -128,6 +128,27 @@ BEGIN {
 }
     ''')
 
+def test_regex_in_string():
+    compile_run_answer_assert(1,'''
+BEGIN {
+    var="start"
+    astr=substr("string",3,1)
+    if( var~astr ) exit 1
+    exit 0
+}
+    ''')
+
+def test_regex_as_block():
+    compile_run_answer_assert(1,'''BEGIN {
+    var="start"
+    astr=substr("Duplicated",3,1)
+    exit_code=0
+}
+$3~astr {exit_code=1; exit 1;}
+END {
+    exit exit_code
+}''',[full_file_name('lines.txt')])
+
 def test_array_print(capsys):
     compile_run_capsys_assert(capsys,'value\n','''
 BEGIN {

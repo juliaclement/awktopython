@@ -366,8 +366,8 @@ class AwkPyCompiler():
             if sym is None:
                 if token[0] in '1234567890':
                     sym=Sym(token,SymType.NUMBER)
-                elif token[0].isalpha() and token.isalnum():
-                    sym=SymVariable(token,python_equivalent='self.'+token)
+                elif token.isidentifier():
+                    sym=SymVariable(token)
                 elif token[0]=='"':
                     sym=Sym(token.replace(chr(1),'\\"'),SymType.STRING)
                 elif token[0].isspace():
@@ -468,6 +468,8 @@ class AwkPyCompiler():
             self.advance_token() # get rid of operator
         if self.current_token.is_regex():
             pattern=self.current_token.token[1:-1]
+        elif self.current_token.is_variable():
+            return pfx+f're.search({self.current_token.python_equivalent},str({variable}))'+sfx
         else:
             if self.current_token.token != '/':
                 self.syntax_error("/")
@@ -475,7 +477,7 @@ class AwkPyCompiler():
             while self.current_token.token != '/':
                 pattern+=self.current_token.token
                 self.advance_token()
-        return pfx+f're.search(r"{pattern}",{variable})'+sfx
+        return pfx+f're.search(r"{pattern}",str({variable}))'+sfx
 
     def compile_uni_operator(self,ans:list=[])->list:
         if self.current_token.token in ['++','--']: #pre_inc / pre_dec           
@@ -1344,10 +1346,6 @@ if __name__=="__main__":
     print b
     }'''
     source=r'''BEGIN {
-    a="<>"
-    print a a
-    }'''
-    source=r'''BEGIN {
     a[1]="<>"
     print a[1] a[1]
     }'''
@@ -1370,6 +1368,21 @@ if __name__=="__main__":
         i+=1;
     }
     print t":"i
+}'''
+    source=r'''BEGIN {
+    var="start"
+    astr=substr("string",3,1)
+    if( var~astr ) exit 1
+    exit 0
+}'''
+    source=r'''BEGIN {
+    exit_code=0
+    var="start"
+    astr=substr("Duplicated",3,1)
+}
+$3~astr {exit_code=1; exit 1;}
+END {
+    exit exit_code
 }'''
     a=AwkPyCompiler()
     code=a.compile(source)
