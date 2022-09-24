@@ -52,8 +52,10 @@ class AwkNamespace():
     @classmethod
     def startup(cls):
         cls.awk_awkpy_namespace=AwkNamespace('awkpy')
+        # The awk namespace is a bit magic, it does not impose a prefix
+        # on symbols defined in it
         cls.awk_awk_namespace=\
-        cls.awk_current_namespace=AwkNamespace('awk')
+        cls.awk_current_namespace=AwkNamespace('awk','self.','')
     
     @classmethod
     def get_namespace(cls,ns_name):
@@ -73,11 +75,17 @@ class AwkNamespace():
         return cls.awk_current_namespace
 
     def __init__(self,name,python_equivalent=None,decorated=None):
-        self.name=name
-        self.python_equivalent = 'self.'+name+'__' if python_equivalent is None else python_equivalent
-        self.decorated = name+'::' if decorated is None else decorated
-        AwkNamespace.awk_namespaces[name]=self
+        # There can only be one instance for any namespace name
+        # Don't allow synonyms to override any changes
+        if not name in self.awk_namespaces:
+            self.name=name
+            self.python_equivalent = 'self.'+name+'__' if python_equivalent is None else python_equivalent
+            self.decorated = name+'::' if decorated is None else decorated
+            AwkNamespace.awk_namespaces[name]=self
     
+    #
+    # There can only be one instance for any namespace name
+    #
     def __new__(cls,name,*args,**kw):
         if name in cls.awk_namespaces:
             return cls.awk_namespaces[name]
@@ -187,7 +195,7 @@ class SymVariable(Sym):
     def __init__(self, token:str, sym_type:SymType=SymType.VARIABLE, \
                  awk_priority:int=10000, python_priority:int=10000,python_equivalent=None, built_in=False, array=False, scalar=False):
         if python_equivalent is None:
-            python_equivalent = 'self.'+token
+            python_equivalent = 'self.'+token.replace('::','__')
         super().__init__(token, sym_type, awk_priority, python_priority, python_equivalent)
         self.built_in = built_in
         self.is_array=array
@@ -238,8 +246,8 @@ class SymFunction(Sym):
                  ext_library=None):
         global default_function_parser
         self.user_defined = user_defined
-        if user_defined:
-            python_equivalent='self.'+token
+        if user_defined and python_equivalent is None:
+            python_equivalent = 'self.'+token.replace('::','__')
         super().__init__(token, SymType.FUNCTION,python_equivalent=python_equivalent)
         if ext_library is None and not user_defined and \
                 python_equivalent is not None and "." in python_equivalent:
@@ -306,6 +314,7 @@ class AwkPyCompiler():
         while line_nr < len(lines_arr):
             line=lines_arr[line_nr].strip()
             yield f'@@@{line_nr}@@@{line}'
+            expect_namespace=False
             while line:
                 if match:=self.lexre.search(line):
                     start,length=match.regs[0]
@@ -318,6 +327,17 @@ class AwkPyCompiler():
                         continue
                     token=line[:length]
                     line=line[length:]
+                    # we handle selecting namespaces very early as thedy permute the
+                    # internal naming of variables & other symbols
+                    if expect_namespace:
+                        expect_namespace = False
+                        token = token.strip('"')
+                        AwkNamespace.set_current_namespace(token)
+                        yield f'@namespace "{token}"'
+                        continue
+                    elif token=='@namespace':
+                        expect_namespace = True
+                        continue
                     # Because of the ambiguity of detecting them, our regex
                     # has additional characters prepended to regexes.
                     is_prefixed_regex = token[0] in "!~(," and '/' in token
@@ -362,11 +382,23 @@ class AwkPyCompiler():
                 self.lineNr+=1
                 have_output=False
                 continue # line number
+            if token.startswith('@namespace'):
+                continue # I doubt it's needed later
+            # decorate identifiers for the current namespace unless disallowed.
+            # NB ns::name fails the isidentifier test so needs special processing
+            tokenns=AwkNamespace.awk_current_namespace
+            if '::' in token and token.replace('::','__').isidentifier():
+                tokparts=token.split('::',1)
+                tokenns=AwkNamespace.get_namespace(tokparts[0])
+                token=tokparts[1]
+            if token.isidentifier() and not token.isupper() and token not in self.reserved_words :
+                token = tokenns.decorated+token
+
             sym=self.syms.get(token)
             if sym is None:
                 if token[0] in '1234567890':
                     sym=Sym(token,SymType.NUMBER)
-                elif token.isidentifier():
+                elif token.replace('::','__').isidentifier():
                     sym=SymVariable(token)
                 elif token[0]=='"':
                     sym=Sym(token.replace(chr(1),'\\"'),SymType.STRING)
@@ -740,8 +772,9 @@ class AwkPyCompiler():
         former_output_section = self.current_output
         self.current_output=self.function_section
         self.advance_token() # discard function
-        function_line = 'def '+self.current_token.token+'(self'
         func_sym=SymFunction(self.current_token.token,user_defined=True)
+        func_name = func_sym.python_equivalent[5:] # remove the self. from the def
+        function_line = 'def '+func_name+'(self'
         self.syms[ func_sym.token ] = func_sym
         self.replacement_syms[ func_sym.token ] = func_sym
         self.current_token=func_sym
@@ -1262,51 +1295,6 @@ class AwkPyCompiler():
                 Sym('.', -1, 20, 20), # FIXME, where does this come from?
                 Sym('=', SymType.BINOPERATOR, 20, 20), # not an operator in Python. c.v. :=
             #
-            #   functions
-            #
-                SymFunction('atan2', python_equivalent='math.atan2'),
-                SymFunction('cos', python_equivalent='math.cos'),
-                SymFunction('exp', python_equivalent='math.exp'),
-                SymFunction('int', python_equivalent='int'),
-                SymFunction('length', python_equivalent='len'),
-                SymFunction('log', python_equivalent='math.log'),
-                SymFunction('srand', python_equivalent='random.seed'),
-                SymFunction('rand', python_equivalent='random.random'),
-                SymFunction('sin', python_equivalent='math.sin'),
-                SymFunction('sqrt', python_equivalent='math.sqrt'),
-
-                SymFunction('split',lambda t=[]:self.compile_split_function_call(t)),
-                SymFunction('substr',lambda:self.compile_substr_function_call()),
-                SymFunction('tolower',default_function_method_parser,'lower'),
-                SymFunction('toupper',default_function_method_parser,'upper'),
-            #
-            #   statements
-            #
-                SymStatement('if', lambda :self.compile_if_statement()),
-                Sym('else', SymType.RESERVED_WORD),
-                SymStatement('exit', lambda :self.compile_exit_statement()),
-                SymStatement('for', lambda :self.compile_for_statement()),
-                SymStatement('do', lambda :self.compile_do_statement()),
-                SymStatement('while', lambda :self.compile_while_statement()),
-                SymStatement('next', lambda :self.compile_simple_command(),python_equivalent="raise AwkNext"),
-                SymStatement('nextfile', lambda :self.compile_simple_command(),python_equivalent="raise AwkNextFile"),
-                SymStatement('function', lambda :self.compile_function_def()),
-                SymStatement('print', lambda : self.compile_print_statement()),
-                SymStatement('break', lambda : self.compile_simple_command()),
-                SymStatement('continue', lambda : self.compile_simple_command()),
-                SymStatement('return', lambda : self.compile_expression_command()),
-                SymTerminator(';',True, False,'\n'),
-                SymTerminator('\n',True,True),
-                SymTerminator('}',False, False),
-            #
-            #   Non operators
-            #
-                Sym('BEGIN', SymType.SECTION, 1),
-                Sym('BEGINFILE', SymType.SECTION, 2),
-                # body = 3
-                Sym('ENDFILE', SymType.SECTION, 4),
-                Sym('END', SymType.SECTION, 5),
-            #
             #   Built-in variables
             #
                 SymVariable('ARGC',built_in=True, scalar=True),
@@ -1324,6 +1312,75 @@ class AwkPyCompiler():
                 Sym('EndOfInput',SymType.END_OF_INPUT),
             ]:
                 self.syms[ sym.token ]=sym
+        #
+        # Reserved words. Add to self.syms & self.reserved_words
+        #
+        self.reserved_words={}
+        for sym in [
+            #
+            #   functions
+            #
+                SymFunction('atan2', python_equivalent='math.atan2'),
+                SymFunction('cos', python_equivalent='math.cos'),
+                SymFunction('exp', python_equivalent='math.exp'),
+                SymFunction('int', python_equivalent='int'),
+                SymFunction('length', python_equivalent='len'),
+                SymFunction('log', python_equivalent='math.log'),
+                SymFunction('rand', python_equivalent='random.random'),
+                SymFunction('srand', python_equivalent='random.seed'),
+                SymFunction('sin', python_equivalent='math.sin'),
+                SymFunction('split',lambda t=[]:self.compile_split_function_call(t)),
+                SymFunction('sqrt', python_equivalent='math.sqrt'),
+                SymFunction('substr',lambda:self.compile_substr_function_call()),
+                SymFunction('tolower',default_function_method_parser,'lower'),
+                SymFunction('toupper',default_function_method_parser,'upper'),
+            #
+            #   Unimplemented functions
+            #
+                Sym('close', SymType.RESERVED_WORD),
+                Sym('gsub', SymType.RESERVED_WORD),
+                Sym('index', SymType.RESERVED_WORD),
+                Sym('match', SymType.RESERVED_WORD),
+                Sym('sprintf', SymType.RESERVED_WORD),
+                Sym('sub', SymType.RESERVED_WORD),
+                Sym('system', SymType.RESERVED_WORD),
+            #
+            #   Statements
+            #
+                SymStatement('break', lambda : self.compile_simple_command()),
+                SymStatement('continue', lambda : self.compile_simple_command()),
+                SymStatement('do', lambda :self.compile_do_statement()),
+                SymStatement('exit', lambda :self.compile_exit_statement()),
+                SymStatement('for', lambda :self.compile_for_statement()),
+                SymStatement('function', lambda :self.compile_function_def()),
+                SymStatement('if', lambda :self.compile_if_statement()),
+                Sym('else', SymType.RESERVED_WORD),
+                SymStatement('next', lambda :self.compile_simple_command(),python_equivalent="raise AwkNext"),
+                SymStatement('nextfile', lambda :self.compile_simple_command(),python_equivalent="raise AwkNextFile"),
+                SymStatement('print', lambda : self.compile_print_statement()),
+                SymStatement('return', lambda : self.compile_expression_command()),
+                SymStatement('while', lambda :self.compile_while_statement()),
+                SymTerminator(';',True, False,'\n'),
+                SymTerminator('\n',True,True),
+                SymTerminator('}',False, False),
+            #
+            #   Unimplemented statements
+            #
+                Sym('delete', SymType.RESERVED_WORD),
+                Sym('getline', SymType.RESERVED_WORD),
+                Sym('in', SymType.RESERVED_WORD),
+                Sym('printf', SymType.RESERVED_WORD),
+            #
+            #   Non operators
+            #
+                Sym('BEGIN', SymType.SECTION, 1),
+                Sym('BEGINFILE', SymType.SECTION, 2),
+                # body = 3
+                Sym('ENDFILE', SymType.SECTION, 4),
+                Sym('END', SymType.SECTION, 5),
+            ]:
+                self.syms[ sym.token ]=sym
+                self.reserved_words[ sym.token ]=sym
         self.replacement_syms={}
         self.current_token:Sym=self.syms['+'] # dummy
         self.current_line = -1
@@ -1375,14 +1432,17 @@ if __name__=="__main__":
     if( var~astr ) exit 1
     exit 0
 }'''
-    source=r'''BEGIN {
-    exit_code=0
-    var="start"
-    astr=substr("Duplicated",3,1)
-}
-$3~astr {exit_code=1; exit 1;}
-END {
-    exit exit_code
+    source=r'''
+    function squirrel() {
+        return "squeak"
+    }
+    @namespace "secret"
+    function squirrel() {
+        return "shhhh"
+    }
+    BEGIN {
+        @namespace "awk"
+        exit squirrel()
 }'''
     a=AwkPyCompiler()
     code=a.compile(source)

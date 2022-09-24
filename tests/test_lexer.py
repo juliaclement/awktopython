@@ -23,7 +23,7 @@ import pytest
 from pathlib import Path
 import math
 import sys
-from helpers import full_file_name, Fuzzy
+from helpers import full_file_name, Fuzzy, compile_run_answer_assert
 try:
     from awkpy_compiler import AwkPyCompiler,AwkNamespace
 except:
@@ -32,10 +32,22 @@ except:
     from awkpy_compiler import AwkPyCompiler,AwkNamespace
 ''' Test AwkNamespace class'''
 def test_ns_decorations():
+    ns=AwkNamespace('smurf')
+    assert ns.name == 'smurf'
+    assert ns.decorated == 'smurf::'
+    assert ns.python_equivalent == 'self.smurf__'
+
+def test_ns_decorations_for_predefined_awk():
     ns=AwkNamespace.awk_awk_namespace
     assert ns.name == 'awk'
-    assert ns.decorated == 'awk::'
-    assert ns.python_equivalent == 'self.awk__'
+    assert ns.decorated == ''
+    assert ns.python_equivalent == 'self.'
+
+def test_ns_decorations_unchanged_for_awk():
+    ns=AwkNamespace('awk')
+    assert ns.name == 'awk'
+    assert ns.decorated == ''
+    assert ns.python_equivalent == 'self.'
 
 def test_ns_UCASE_is_awk():
     AwkNamespace.set_current_namespace('smurf')
@@ -82,3 +94,140 @@ def test_set_current_namespace():
     assert AwkNamespace.awk_current_namespace.name == 'schtroumpfs'
     AwkNamespace.set_current_namespace(oldns2)
     assert AwkNamespace.get_current_namespace() is oldns2
+
+def test_namespace_ignores_UCASE_vars():
+    compile_run_answer_assert('smurfette','''BEGIN {
+    VAR="start"
+    @namespace "smurf"
+    VAR="smurfette"
+    @namespace "awk"
+    exit VAR
+}''')
+
+def test_namespace_seperates_vars_1():
+    compile_run_answer_assert('start','''BEGIN {
+    var="start"
+    @namespace "smurf"
+    var="smurfette"
+    @namespace "awk"
+    exit var
+}''')
+
+def test_namespace_seperates_vars_2():
+    compile_run_answer_assert('smurfette','''BEGIN {
+    var="start"
+    @namespace "smurf"
+    var="smurfette"
+    @namespace "awk"
+    exit smurf::var
+}''')
+
+def test_namespace_qualified_vars_1():
+    compile_run_answer_assert('papasmurf','''BEGIN {
+    var="start"
+    @namespace "smurf"
+    var="smurfette"
+    @namespace "awk"
+    smurf::var="papasmurf"
+    awk::var="varnish"
+    @namespace "smurf"
+    exit var
+}''')
+
+def test_namespace_resident_functions_1():
+    compile_run_answer_assert('shhhh','''
+    function squirrel() {
+        return "squeak"
+    }
+    @namespace "secret"
+    function squirrel() {
+        return "shhhh"
+    }
+    BEGIN {
+        exit squirrel()
+}''')
+
+def test_namespace_resident_functions_2():
+    compile_run_answer_assert('squeak','''
+    function squirrel() {
+        return "squeak"
+    }
+    @namespace "secret"
+    function squirrel() {
+        return "shhhh"
+    }
+    BEGIN {
+        @namespace "awk"
+        exit squirrel()
+}''')
+
+def test_cross_namespace_function_calls_1():
+    compile_run_answer_assert('squeak','''
+    function squirrel() {
+        return "squeak"
+    }
+    @namespace "normal"
+    function squirrel() {
+        return "tsk"
+    }
+    @namespace "secret"
+    function squirrel() {
+        return "shhhh"
+    }
+    @namespace "awk"
+    BEGIN {
+        exit squirrel()
+}''')
+
+def test_cross_namespace_function_calls_2():
+    compile_run_answer_assert('tsk','''
+    function squirrel() {
+        return "squeak"
+    }
+    @namespace "normal"
+    function squirrel() {
+        return "tsk"
+    }
+    @namespace "secret"
+    function squirrel() {
+        return "shhhh"
+    }
+    @namespace "awk"
+    BEGIN {
+        exit normal::squirrel()
+}''')
+
+def test_cross_namespace_function_calls_3():
+    compile_run_answer_assert('shhhh','''
+    function squirrel() {
+        return "squeak"
+    }
+    @namespace "normal"
+    function squirrel() {
+        return "tsk"
+    }
+    @namespace "secret"
+    function squirrel() {
+        return "shhhh"
+    }
+    @namespace "awk"
+    BEGIN {
+        exit secret::squirrel()
+}''')
+
+def test_cross_namespace_function_calls_3():
+    compile_run_answer_assert('squeak','''
+    function squirrel() {
+        return "squeak"
+    }
+    @namespace "normal"
+    function squirrel() {
+        return "tsk"
+    }
+    @namespace "secret"
+    function squirrel() {
+        return "shhhh"
+    }
+    BEGIN {
+        exit awk::squirrel()
+}''')

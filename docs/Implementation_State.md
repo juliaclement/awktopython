@@ -84,9 +84,7 @@ Gawk optionally includes arbitrary-precision math libraries. Python ones such as
 
 ### Lexer
 
-As the first stage of compilation, the source programs are broken up into a series of tokens (names, strings, operators, etc.) by a routine
-known as the lexer. The current one is very bad & I doubt it correctly handles any but the simplest of patterns (/.../).
-**It needs replacing,** either a total rewrite or modify the parser available in the Python library. The rewrite would enable us to support namespaces and @include files.
+As the first stage of compilation, the source programs are broken up into a series of tokens (names, strings, operators, etc.) by a routine known as the lexer. This has recently been replaced by a better one.
 
 ### Conditions
 
