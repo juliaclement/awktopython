@@ -19,11 +19,72 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from curses.ascii import isupper
 import re
 from enum import IntEnum
 from collections import defaultdict
+from tarfile import SYMTYPE
 
 """ Helper classes"""
+""" Namespaces """
+class AwkNamespace():
+    awk_namespaces={}
+    awk_current_namespace=None
+    awk_awk_namespace=None
+    awk_awkpy_namespace=None
+
+    @classmethod
+    def get_current_namespace(cls):
+        return cls.awk_current_namespace
+
+    @classmethod
+    def set_current_namespace(cls,namespace):
+        prior_namespace=cls.awk_current_namespace
+        if isinstance(namespace,AwkNamespace):
+            ns=namespace
+        else:
+            ns=AwkNamespace.awk_namespaces.get(namespace,None)
+            if ns is None:
+                ns=AwkNamespace(namespace)
+        cls.awk_current_namespace=ns
+        return prior_namespace
+
+    @classmethod
+    def startup(cls):
+        cls.awk_awkpy_namespace=AwkNamespace('awkpy')
+        cls.awk_awk_namespace=\
+        cls.awk_current_namespace=AwkNamespace('awk')
+    
+    @classmethod
+    def get_namespace(cls,ns_name):
+        ns=cls.awk_namespaces.get(ns_name,None)
+        if ns is None:
+            ns=AwkNamespace(ns_name)
+        return ns
+   
+    @classmethod
+    def find_ns(cls,varname:str):
+        if '::' in varname:
+            parts=varname.split('::')
+            ns_name=parts[0]
+            return cls.get_namespace(ns_name)
+        if varname.isupper():
+            return cls.awk_awk_namespace
+        return cls.awk_current_namespace
+
+    def __init__(self,name,python_equivalent=None,decorated=None):
+        self.name=name
+        self.python_equivalent = 'self.'+name+'__' if python_equivalent is None else python_equivalent
+        self.decorated = name+'::' if decorated is None else decorated
+        AwkNamespace.awk_namespaces[name]=self
+    
+    def __new__(cls,name,*args,**kw):
+        if name in cls.awk_namespaces:
+            return cls.awk_namespaces[name]
+        return super().__new__(cls)
+
+AwkNamespace.startup()
+
 """ Symbol Table"""
 class SymType(IntEnum):
     UNKNOWN = 0     # Unknown
@@ -47,8 +108,9 @@ class SymType(IntEnum):
     SECTION = 18        # A_section
     STATEMENT = 19      # A_statement
     COMMA = 20          # Comma
-    STATEMENT_TERMINATOR = 21 # Terminator
-    END_OF_INPUT = 22   # End_Of_Input
+    REGEX = 20          # Regex
+    STATEMENT_TERMINATOR = 22 # Terminator
+    END_OF_INPUT = 23   # End_Of_Input
 #   Sym
 sym_display_name=[  "Unknown",
                     "None",
@@ -71,6 +133,7 @@ sym_display_name=[  "Unknown",
                     "A_section",
                     "A_statement",
                     "Comma",
+                    "Regex",
                     "Terminator",
                     "End_Of_Input",
                  ]
@@ -98,14 +161,25 @@ class Sym():
         return False
     def is_variable(self):
         return self.sym_type == SymType.VARIABLE
+    def is_regex(self):
+        return False
 
 class SymOperator(Sym):
     """Symbol table entry for operators"""
     def __init__(self, token:str, sym_type:SymType=SymType.NONE, \
                  awk_priority:int=10000, python_priority:int=10000,python_equivalent=None):
         super().__init__(token, sym_type, awk_priority, python_priority, python_equivalent)
-
     def is_operator(self):
+        return True
+
+class SymRegex(Sym):
+    """Symbol table entry for regular expressions"""
+    def __init__(self, token:str, sym_type:SymType=SymType.REGEX, \
+                 awk_priority:int=10000, python_priority:int=10000,python_equivalent=None):
+        super().__init__(token, sym_type, awk_priority, python_priority, python_equivalent)
+    def is_operand(self):
+        return True
+    def is_regex(self):
         return True
 
 class SymVariable(Sym):
@@ -118,16 +192,12 @@ class SymVariable(Sym):
         self.built_in = built_in
         self.is_array=array
         self.is_scalar=scalar
-
     def is_operator(self):
         return False
-
     def is_operand(self):
         return True
-        
     def is_variable(self):
         return True
-        
     def is_built_in(self):
         return self.built_in
 
@@ -230,75 +300,100 @@ class AwkPyCompiler():
             point += 1
         raise SyntaxError( f'Found "{self.current_token.token}" expected {expected} "+\
                            f"near {locate}- token {self.current_token_nr} which is on line {self.current_line}')
-    def lex(self,line):
-        """Use a regex to split the line into tokens
-           In some cases (e.g. +=) two adjacent symbols are joined
-           into a single token"""
-        line=line.replace('\\"',chr(1))
-        rtok=self.lexre.split(line)
-        itok=[t for t in rtok if not t is None and t != '']
-        ntok=itok+['','']
-        toks=[]
-        i=0
-        while i < len(itok):
-            tok=itok[i]
-            if tok in '+-*/%!=' and ntok[i+1] == '=':
-                tok=tok+'='
-                i+=1
-            elif tok in '+-' and ntok[i+1] == tok:
-                tok=tok+tok
-                i+=1
-            elif tok == '!' and ntok[i+1] == '~':
-                tok='!~'
-                i+=1
-            elif tok == '$' and ntok[i+1][0] in '0123456789':
-                tok='$'+ntok[i+1]
-                i+=1
-            toks.append(tok)
-            i+=1
-        return toks
 
-    def lex_string( self,source ):
+    def lex_lines(self,lines_arr:list):
+        line_nr=0
+        while line_nr < len(lines_arr):
+            line=lines_arr[line_nr].strip()
+            yield f'@@@{line_nr}@@@{line}'
+            while line:
+                if match:=self.lexre.search(line):
+                    start,length=match.regs[0]
+                    if start > 0:
+                        if line[0]==' ':
+                            line=line.strip()
+                            continue
+                        yield line[:start]
+                        line=line[start:]
+                        continue
+                    token=line[:length]
+                    line=line[length:]
+                    # Because of the ambiguity of detecting them, our regex
+                    # has additional characters prepended to regexes.
+                    is_prefixed_regex = token[0] in "!~(," and '/' in token
+                    # strings and regexs may span multiple lines
+                    if (token[0] in '"\'' and token[-1] != token[0]) or \
+                    (is_prefixed_regex or token[0] == '/') and token[-1] != "/":
+                        if token[-1] == '\\':
+                            token=token[:-1]
+                        line_nr+=1
+                        if line_nr < len(lines_arr):
+                            line += token+lines_arr[line_nr]
+                            yield f'@@@{line_nr}@@@{line}'
+                            continue
+                    # now is the time to split prepended characters from regexes
+                    if is_prefixed_regex:
+                        toks = token.split('/',1)
+                        yield toks[0].strip()
+                        token='/'+toks[1]
+                    yield token
+                else:
+                    yield line
+                    break
+            yield '\n'
+            line_nr+=1
+
+    def lex_string( self,filename, source ):
         """Walk through the raw tokens produced by calls to self.lex
            converting them into symbol table entries.
            The input line number is stored with each cooked token"""
+        oldns=AwkNamespace.set_current_namespace(AwkNamespace.awk_awk_namespace)
         answer=[]
         sym_lf=self.syms.get('\n')
         sym=sym_lf
+        have_output=False
         if isinstance(source, str):
             source=source.split('\n')
-        for line in source:
-            sym=sym_lf
-            self.lineNr+=1
-            self.current_line=self.lex(line)
-            if len(self.current_line)==0: continue
-            for token in self.current_line:
-                sym=self.syms.get(token)
-                if sym is None:
-                    if token[0] in '1234567890':
-                        sym=Sym(token,SymType.NUMBER)
-                    elif token[0].isalpha() and token.isalnum():
-                        sym=SymVariable(token,python_equivalent='self.'+token)
-                    elif token[0]=='"':
-                        sym=Sym(token.replace(chr(1),'\\"'),SymType.STRING)
-                    elif token[0].isspace():
-                        sym=Sym(token,SymType.SPACE)
-                    elif token[0]==',':
-                        sym=Sym(token,SymType.COMMA)
-                    elif len(token) > 1 and token[0] == '-' and token[1] in '1234567890':
-                        sym=Sym(token,SymType.NUMBER)
-                    elif len(token) > 1 and token[0] == '$':
-                        sym=Sym(token,SymType.DOLLAR,python_equivalent=f'self._FLDS[{token[1:]}]')
-                    else:
-                        raise NameError(f'Unrecognised token {token} near line {self.lineNr}')
-                    self.syms[token] = sym
+        for token in self.lex_lines(source):
+            if len(token)>1:
+                token=token.strip()
+            if len(token)>2 and token.startswith('@@@'):
+                sym=sym_lf
+                self.lineNr+=1
+                have_output=False
+                continue # line number
+            sym=self.syms.get(token)
+            if sym is None:
+                if token[0] in '1234567890':
+                    sym=Sym(token,SymType.NUMBER)
+                elif token[0].isalpha() and token.isalnum():
+                    sym=SymVariable(token,python_equivalent='self.'+token)
+                elif token[0]=='"':
+                    sym=Sym(token.replace(chr(1),'\\"'),SymType.STRING)
+                elif token[0].isspace():
+                    # sym=Sym(token,SymType.SPACE)
+                    continue
+                elif token[0]==',':
+                    sym=Sym(token,SymType.COMMA)
+                elif len(token) > 1 and token[0] == '-' and token[1] in '1234567890':
+                    sym=Sym(token,SymType.NUMBER)
+                elif len(token) > 1 and token[0] == '$':
+                    sym=Sym(token,SymType.DOLLAR,python_equivalent=f'self._FLDS[{token[1:]}]')
+                elif len(token) > 1 and token[0] == '/': # regex, operators already recognised
+                    sym=SymRegex(token)
+                else:
+                    raise NameError(f'Unrecognised token {token} near line {self.lineNr}')
+                self.syms[token] = sym
+            if have_output or sym.token != '\n':
                 answer.append( (self.lineNr, sym) )
-            if sym.sym_type not in [ SymType.STATEMENT_TERMINATOR, SymType.LEFT_BRACE ]:
-                answer.append( (self.lineNr, sym_lf) )
+                have_output=True
+            # if sym.sym_type not in [ SymType.STATEMENT_TERMINATOR, SymType.LEFT_BRACE ]:
+            #    answer.append( (self.lineNr, sym_lf) )
         sym=(-1,Sym('EndOfInput',SymType.END_OF_INPUT))
         answer.append(sym)
         answer.append(sym)
         answer.append(sym)
+        AwkNamespace.set_current_namespace(oldns)
         return answer
 
     def advance_token(self):
@@ -369,15 +464,18 @@ class AwkPyCompiler():
         """pattern match variable against next"""
         pfx,sfx = (' not (', ')') if test == '!~' else (' ','')
         pattern = ''
-        if self.current_token.token != '/':
+        if self.current_token.token[0] != '/' and not self.current_token.is_regex():
             self.advance_token() # get rid of operator
-        if self.current_token.token != '/':
-            self.syntax_error("/")
-        self.advance_token()
-        while self.current_token.token != '/':
-            pattern+=self.current_token.token
+        if self.current_token.is_regex():
+            pattern=self.current_token.token[1:-1]
+        else:
+            if self.current_token.token != '/':
+                self.syntax_error("/")
             self.advance_token()
-        return pfx+f're.search("{pattern}",{variable})'+sfx
+            while self.current_token.token != '/':
+                pattern+=self.current_token.token
+                self.advance_token()
+        return pfx+f're.search(r"{pattern}",{variable})'+sfx
 
     def compile_uni_operator(self,ans:list=[])->list:
         if self.current_token.token in ['++','--']: #pre_inc / pre_dec           
@@ -853,7 +951,7 @@ class AwkPyCompiler():
         elif self.current_token.sym_type in [SymType.LEFT_PAREN, SymType.VARIABLE, SymType.FUNCTION,\
                                              SymType.AMBIGUOUSOPERATOR, SymType.UNIOPERATOR]:
             prog=self.compile_expression()
-        else:
+        elif self.current_token.token != '}':
             self.syntax_error('a statement')
         if self.current_token.sym_type == SymType.STATEMENT_TERMINATOR and \
            self.current_token.consume :
@@ -871,6 +969,10 @@ class AwkPyCompiler():
     def compile_pattern_condition(self):
         """ consume [condition] { statement; ... } """
         prog=None
+        while self.current_token.token == '\n':
+            self.advance_token()
+        if self.current_token.sym_type == SymType.END_OF_INPUT:
+            return
         if self.current_token.sym_type == SymType.SECTION:
             former_output_section = self.current_output
             self.current_output = self.current_token.awk_priority
@@ -888,9 +990,9 @@ class AwkPyCompiler():
                 prog=self.compile_expression()
             elif self.current_token.sym_type in [SymType.FUNCTION,SymType.VARIABLE,SymType.DOLLAR,SymType.NUMBER,SymType.LEFT_PAREN]:
                 prog=self.compile_condition('{')
-            elif self.current_token.token == '/':
+            elif self.current_token.token == '/' or self.current_token.is_regex() :
                 self.output_line( 'if '+self.compile_regex('self._FLDS[0]', '~')+':')
-                if self.current_token.token == '/':
+                if self.current_token.is_regex() or self.current_token.token == '/':
                     self.advance_token()
                 self.compile_indented_statement()
             else:
@@ -919,8 +1021,11 @@ class AwkPyCompiler():
             source = file.read()
             file.close()
         elif len(source) > 2 and source[0:2] == '-e':
+            filename='command line'
             source=source[2:]
-        self.tokens=self.lex_string(source+'\n')
+        else:
+            filename='command line'
+        self.tokens=self.lex_string(filename,source+'\n')
         self.current_token_nr=-2
         self.advance_token()
         self.advance_token()
@@ -1081,11 +1186,20 @@ class AwkPyCompiler():
         self.generated_code=[[],[],[],[],[],[],[]] #__init__, BEGIN, BEGINFILE, MAINLOOP, ENDFILE, END, functions
         self.current_output = 3 # body
         self._has_mainloop = False
-        varnum='([_A-Za-z][_A-Za-z0-9]*)|([0-9.-]+)'
-        strings='("[^"]*")'
-        operators=r'(["-/!:-?`@~^_\[\{\]\}])'
-        pat=f"{varnum}|{strings}|{operators}|\\s"
-        self.lexre=re.compile(pat)
+        '''regular expression that should recognise all awk symbols'''
+        comment=r'#.*$'
+        string=r'"(([^\\](\\\\)*\\")|([^"\n]))*("|$)'
+        # Not strictly correct, but we just treat character constants the same as strings
+        # and leave it for later stages to sort it out.
+        chars=string.replace('"',"'")
+        regexs=r'(^|(!~)|([~(,]))\s*/((\[[^\]]*\])|([^/\n]))*(/|$)'
+        ident=r'(@?|\$+)[A-Za-z_][A-Za-z_0-9]*(::[A-Za-z_][A-Za-z_0-9]*)?'
+        dollar=r'[$]+([0-9]*)' # only $ number as $ident already recognised by ident
+        num=r'(0x?)?[-]?[0-9]+(\.[0-9]+)?'
+        ops=r'(!~)|(\+\+)|(--)|(\*\*)|(\|\|)|(&&)|(!~)|(<<)|(>>)|([-+*/%^=!<>]=)|([-+*/%^!~(){},.:;[\]$])'
+        pattern=rf'({comment})|({string})|({chars})|({regexs})|({ident})|({dollar})|({num})|({ops})'
+        self.lexre=re.compile(pattern)
+        self.lexre_octal=re.compile(r'0[0-7]+') # octal integers
         self.lineNr=0
         self.indent = '        '
         global default_function_parser
@@ -1249,8 +1363,14 @@ if __name__=="__main__":
     print l,r
     }'''
     source=r'''BEGIN {
-    print ENVIRON["PS2"]
-    }'''
+    i=0;
+    t=6;
+    while(t>1) {
+        t-=1;
+        i+=1;
+    }
+    print t":"i
+}'''
     a=AwkPyCompiler()
     code=a.compile(source)
     print(code)

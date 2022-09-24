@@ -232,5 +232,3 @@ BEGIN {a="Whimper"
     b=tolower(a)
     exit b
 }''')
-
-test_toupper_function_call()

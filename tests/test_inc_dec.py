@@ -20,8 +20,8 @@
 
 import pytest
 import re
-from awkpy_runtime import AwkpyRuntimeVarOwner,AwkEmptyVar,AwkEmptyVarInstance
 from helpers import compile_run_answer_assert
+from awkpy_runtime import AwkpyRuntimeVarOwner,AwkEmptyVar,AwkEmptyVarInstance
 
 def test_post_inc_arr_uninitialised():
     compile_run_answer_assert(1,"""
