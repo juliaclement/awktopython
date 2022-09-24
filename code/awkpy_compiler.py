@@ -901,11 +901,17 @@ class AwkPyCompiler():
 
     def compile_to_segments(self, source):
         if len(source) > 2 and source[0:2] == '-f':
-            file = open(source[2:],mode='r')
+            filename=source[2:]
+            if filename in self.included_files:
+                raise SyntaxError(f"{filename} can't be used as both included and as a source file ")
+            self.source_files.append(filename)
+            file = open(filename,mode='r')
             source = file.read()
             file.close()
         elif len(source) > 2 and source[0:2] == '-i':
             filename=source[2:]
+            if filename in self.source_files:
+                raise SyntaxError(f"{filename} can't be used as both included and as a source file ")
             if filename in self.included_files:
                 return
             self.included_files.append(filename)
@@ -1086,6 +1092,7 @@ class AwkPyCompiler():
         default_function_parser=lambda t=[]: self.compile_generic_function_call(t)
         global default_function_method_parser
         default_function_method_parser=lambda t=[]: self.compile_function_call_to_method(t)
+        self.source_files=[]
         self.included_files=[]
         self.imported_libraries={}
         self.required_libraries={}

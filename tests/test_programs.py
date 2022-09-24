@@ -160,4 +160,23 @@ def test_i_includes_files_once():
     awkpy.run(['awkpy_out', '-i', file, '-i', file, '-e', 'BEGIN {exit a;}'])
     assert AwkpyRuntimeWrapper._ans == 1
 
+def test_i_precludes_f():
+    path=Path(__file__).parent.parent/'tests'
+    file=str(path/'add_1_in_BEGIN.awk')
+    try:
+        assert awkpy.run(['awkpy_out', '-i', file, '-f', file, '-e', 'BEGIN {exit a;}']) is False
+    except SyntaxError as err:
+        print(f"Error: {err}")
+
+def test_f_precludes_i():
+    path=Path(__file__).parent.parent/'tests'
+    file=str(path/'add_1_in_BEGIN.awk')
+    try:
+        assert awkpy.run(['awkpy_out', '-f', file, '-i', file, '-e', 'BEGIN {exit a;}']) is False
+    except SyntaxError as err:
+        print(f"Error: {err}")
+
 if __name__=="__main__":   awkpy.run(['awkpy_out','-vA=Z', '-v', 'B=Y', 'BEGIN {print "A="A", B="B;}','-Wr','-vA=B', '-v', 'C=D'])
+
+test_i_precludes_f()
+test_f_precludes_i()
