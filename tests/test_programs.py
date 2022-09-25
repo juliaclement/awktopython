@@ -90,7 +90,7 @@ BEGIN {
 }'''])
 
 def test_namespace_awk_compiler(capsys):
-    awkpy.run(['awkpy_out','-vawk::A=Z', '-v', 'awk::C=Y', 'BEGIN {print "A="A", C="C;}'])
+    awkpy.run(['awkpy_out','-vawk::a=Z', '-v', 'awk::c=Y', 'BEGIN {print "A="a", C="c;}'])
     captured = capsys.readouterr()
     assert captured.out == 'A=Z, C=Y\n'
 
@@ -99,17 +99,15 @@ def test_namespace_awk_runtime(capsys):
     captured = capsys.readouterr()
     assert captured.out == 'A=B, C=D\n'
 
-def test_namespace_bad_compiler(capsys):
-    try:
-        assert awkpy.run(['awkpy_out','-vbad::A=Z', '-v', 'awk::C=Y', 'BEGIN {print "A="A", C="C;}']) is False
-    except SyntaxError as err:
-        print(f"Error: {err}")
+def test_namespace_user_compiler(capsys):
+    awkpy.run(['awkpy_out','-vuser::a=Z', '-v', 'user::c=Y', 'BEGIN {print "A="user::a", C="user::c;}'])
+    captured = capsys.readouterr()
+    assert captured.out == 'A=Z, C=Y\n'
 
-def test_namespace_bad_runtime(capsys):
-    try:
-        assert awkpy.run(['awkpy_out','-vawk::A=Z', '-v', 'awk::C=Y', 'BEGIN {print "A="A", C="C;}','-Wr','-vbad::A=B', '-v', 'awk::C=D']) is False
-    except SyntaxError as err:
-        print(f"Error: {err}")
+def test_namespace_user_runtime(capsys):
+    awkpy.run(['awkpy_out','-vuser::a=Z', '-v', 'user::c=Y', 'BEGIN {print "A="user::a", C="user::c;}','-Wr','-vuser::a=B', '-v', 'user::c=D'])
+    captured = capsys.readouterr()
+    assert captured.out == 'A=B, C=D\n'
 
 def test_Wr_option(capsys):
     awkpy.run(['awkpy_out','-vA=Z', '-v', 'C=Y', 'BEGIN {print "A="A", C="C;}','-Wr','-vA=B', '-v', 'C=D'])

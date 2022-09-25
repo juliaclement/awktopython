@@ -282,15 +282,20 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         optn=opt.split('=',1)
         setvar=optn[0]
         val=optn[1]
+
         # gawk accepts -v namespace::name=whatever.
-        # we havent yet implemented namespaces, but should support
-        # the default "awk::" namespace
+        # now we have implemented namespaces we need to 
+        # support this, but namespaces are a compile time thing
+        # and we don't have access to them here so we just
+        # fake it. Probably should move the class involved
+        # in managing them somewhere common between us & the
+        # compiler but that's a job for another day
         if '::' in setvar:
             optn=setvar.split('::',1)
             namespace=optn[0]
             setvar = optn[1]
             if namespace != 'awk':
-                raise SyntaxError( f"{arg}: Namespaces in -v not implemented")
+                setvar=f'{namespace}__{setvar}'
         # HEURISTIC: if the value is a number, convert it to one
         # Damned if I know if this is the correct thing to do
         # it duplicates what we do in the compiler so if we change

@@ -215,7 +215,7 @@ def test_cross_namespace_function_calls_3():
         exit secret::squirrel()
 }''')
 
-def test_cross_namespace_function_calls_3():
+def test_cross_namespace_function_calls_4():
     compile_run_answer_assert('squeak','''
     function squirrel() {
         return "squeak"

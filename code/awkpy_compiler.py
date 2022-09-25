@@ -51,6 +51,9 @@ class AwkNamespace():
 
     @classmethod
     def startup(cls):
+        # to avoid polluting the global namespace, awkpy is where any of our own 
+        # extensions will go. For example the routine to convert Python lists to 
+        # AWK style arrays will eventually be moved in there
         cls.awk_awkpy_namespace=AwkNamespace('awkpy')
         # The awk namespace is a bit magic, it does not impose a prefix
         # on symbols defined in it
@@ -1113,18 +1116,19 @@ class AwkPyCompiler():
                     setvar=optn[0]
                     val=optn[1]
                     # gawk accepts -v namespace::name=whatever.
-                    # we havent yet implemented namespaces, but should support
-                    # the default "awk::" namespace
+                    # now we have namespaces these should be supported
                     if '::' in setvar:
                         optn=setvar.split('::',1)
-                        namespace=optn[0]
-                        setvar = optn[1]
-                        if namespace != 'awk':
-                            raise SyntaxError( f"{arg}: Namespaces in -v not implemented")
-                    sym=self.syms.get(setvar,None)
+                        namespace_name=optn[0]
+                        setvar=optn[1]
+                        namespace=AwkNamespace.get_namespace(namespace_name)
+                    else:
+                        namespace=AwkNamespace.awk_awk_namespace
+                    setvar_key = namespace.decorated+setvar
+                    sym=self.syms.get(setvar_key,None)
                     if sym is None:
-                        sym=SymVariable(setvar, python_equivalent='self.'+setvar)
-                        self.syms[setvar]=sym
+                        sym=SymVariable(setvar_key, python_equivalent=namespace.python_equivalent+setvar)
+                        self.syms[setvar_key]=sym
                     # HEURISTIC: if the value is a number, leave it and let Python
                     # convert it to one
                     # If the value is not a number, surround with quotes.
@@ -1134,7 +1138,7 @@ class AwkPyCompiler():
                     try:
                         discard=float(val)
                     except:
-                        val='"'+val+'"'
+                        val='r"""'+val+'"""'
                     sym.init=val
             else:
                 files.append(arg)
@@ -1445,5 +1449,6 @@ if __name__=="__main__":
         exit squirrel()
 }'''
     a=AwkPyCompiler()
-    code=a.compile(source)
+    code=a.compile(['-vuser::a=Z', '-vuser::c=Y', 'BEGIN {@namespace user \
+    print "A="a", C="c;}'])
     print(code)
