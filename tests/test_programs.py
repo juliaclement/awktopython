@@ -174,6 +174,40 @@ def test_f_precludes_i():
     except SyntaxError as err:
         print(f"Error: {err}")
 
+def test_include_includes_file():
+    path=Path(__file__).parent.parent/'tests'
+    file=str(path/'add_1_in_BEGIN.awk')
+    awkpy.run(['awkpy_out', '@include "'+file+'"\
+    BEGIN {exit a;}'])
+    assert AwkpyRuntimeWrapper._ans == 1
+
+def test_include_starts_in_awk_ns():
+    # also tests that namespace is restored on exit from the include
+    path=Path(__file__).parent.parent/'tests'
+    file=str(path/'add_1_in_BEGIN.awk')
+    awkpy.run(['awkpy_out', '''BEGIN {
+        @namespace "q"
+        a=7;}
+    @include "'''+file+'''"
+    BEGIN {
+        exit a;}'''])
+    assert AwkpyRuntimeWrapper._ans == 7
+
+def test_include_and_i_mutually_block_includes_file():
+    path=Path(__file__).parent.parent/'tests'
+    file=str(path/'add_1_in_BEGIN.awk')
+    awkpy.run(['awkpy_out', '-i',file,'-e','@include "'+file+'"\
+    BEGIN {exit a;}'])
+    assert AwkpyRuntimeWrapper._ans == 1
+
+def test_include_includes_file_only_once():
+    path=Path(__file__).parent.parent/'tests'
+    file=str(path/'add_1_in_BEGIN.awk')
+    awkpy.run(['awkpy_out', '@include "'+file+'"\
+    @include "'+file+'"\
+    BEGIN {exit a;}'])
+    assert AwkpyRuntimeWrapper._ans == 1
+
 if __name__=="__main__":   awkpy.run(['awkpy_out','-vA=Z', '-v', 'B=Y', 'BEGIN {print "A="A", B="B;}','-Wr','-vA=B', '-v', 'C=D'])
 
 test_i_precludes_f()

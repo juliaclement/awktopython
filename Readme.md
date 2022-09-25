@@ -26,7 +26,7 @@ python awkpycc.py \[options\] \[awk-program\]
 
 \-f awk-program-file The name of the Awk source code. This option may be used multiple times.
 
-\-i awk-include-file The name of an Awk source code file. This is a Gawk extension that is very similar to -f but only includes the file once. Gawk will error if the same file is (both -f and -i) included through both. We simply ignore this for now.
+\-i awk-include-file The name of an Awk source code file. This is a Gawk extension that is very similar to -f but only includes the file once. Will error if the same file is (both -f and -i) included through both.
 
 \-v variable=value Assign value as the initial value of the named variable before the program, including the BEGIN block if any, is executed.
 

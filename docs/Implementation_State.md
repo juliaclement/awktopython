@@ -16,12 +16,11 @@ awk accepts a command line like “awk -f “prog1.awk” -f “prog2” ... dat
 the files are compiled in order and then produce a single execution
 unit.
 
-Gawk has a “-i” option which is like “-f” but will only include any given file once. Gawk will produce an error message if the same file is included through both -i & -f. Currently we just ignore the issue, should fix. Priority high.
+Gawk has a “-i” option which is like “-f” but will only include any given file once. Will produce an error message if the same file is included through both -i & -f.
 
-@include (gawk extension) unplanned. Would require major changes to the lexer.
+@include (gawk extension) implemented since rewrite of tokenizer.
 
-@namespace (gawk extension) unplanned but looks very interesting. Would require some changes to the lexer and quite likely the symbol table,
-these could be done with one eye on @include in case it is later implemented.
+@namespace (gawk extension) implemented.
 
 @import (possible awkpy extension) Gawk allows extensions written in the C language. Python also has this ability, I’m thinking a general ability to import Python modules or libraries could be useful in its own right, the Python extension would then be free to import C libraries using the appropriate cpython or pypy mechanisms. Would require some changes to
 the lexer & symbol table.
@@ -40,7 +39,7 @@ the lexer & symbol table.
 
 - Restrict arg names to not the same as a function name: planned, low priority
 
-- nawk & gawk but not POSIX allow “func” as an alias of “function”. It would be a 1 line change in the parser, but the POSIX standard includes this “This has been deprecated by the authors of the language, who asked that it not be specified.” so I probably won’t
+- nawk & gawk but not POSIX allow “func” as an alias of “function”. It would be a 1 line change in the parser, but the POSIX standard includes this text “This has been deprecated by the authors of the language, who asked that it not be specified.” so I probably won’t
 
 **The POSIX standard says**
 

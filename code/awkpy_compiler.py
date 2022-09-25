@@ -312,12 +312,14 @@ class AwkPyCompiler():
         raise SyntaxError( f'Found "{self.current_token.token}" expected {expected} "+\
                            f"near {locate}- token {self.current_token_nr} which is on line {self.current_line}')
 
-    def lex_lines(self,lines_arr:list):
+    def lex_lines(self,lines_arr:list, filename):
         line_nr=0
+        yield f'@file {filename}'
         while line_nr < len(lines_arr):
             line=lines_arr[line_nr].strip()
             yield f'@@@{line_nr}@@@{line}'
             expect_namespace=False
+            expect_filename=False
             while line:
                 if match:=self.lexre.search(line):
                     start,length=match.regs[0]
@@ -330,7 +332,7 @@ class AwkPyCompiler():
                         continue
                     token=line[:length]
                     line=line[length:]
-                    # we handle selecting namespaces very early as thedy permute the
+                    # we handle selecting namespaces very early as they permute the
                     # internal naming of variables & other symbols
                     if expect_namespace:
                         expect_namespace = False
@@ -340,6 +342,29 @@ class AwkPyCompiler():
                         continue
                     elif token=='@namespace':
                         expect_namespace = True
+                        continue
+                    # @include also handled early to reduce complexity
+                    # in our caller
+                    if expect_filename:
+                        expect_filename = False
+                        inner_filename = token.strip('"')
+                        if inner_filename in self.source_files:
+                            raise SyntaxError(f"{inner_filename} can't be used as both included and as a source file ")
+                        if inner_filename in self.included_files:
+                            continue
+                        self.included_files.append(inner_filename)
+                        file = open(inner_filename,mode='r')
+                        source = file.read()
+                        file.close()
+                        oldns=AwkNamespace.set_current_namespace(AwkNamespace.awk_awk_namespace)
+                        yield f'@namespace "{AwkNamespace.awk_awk_namespace.name}"'
+                        yield from self.lex_lines(source.split('\n'), inner_filename)
+                        yield f'@resuming "{filename}"'
+                        AwkNamespace.set_current_namespace(oldns)
+                        yield f'@namespace "{oldns.name}"'
+                        continue
+                    elif token=='@include':
+                        expect_filename = True
                         continue
                     # Because of the ambiguity of detecting them, our regex
                     # has additional characters prepended to regexes.
@@ -366,7 +391,7 @@ class AwkPyCompiler():
             yield '\n'
             line_nr+=1
 
-    def lex_string( self,filename, source ):
+    def lex_string( self, filename, source ):
         """Walk through the raw tokens produced by calls to self.lex
            converting them into symbol table entries.
            The input line number is stored with each cooked token"""
@@ -377,7 +402,7 @@ class AwkPyCompiler():
         have_output=False
         if isinstance(source, str):
             source=source.split('\n')
-        for token in self.lex_lines(source):
+        for token in self.lex_lines(source, filename):
             if len(token)>1:
                 token=token.strip()
             if len(token)>2 and token.startswith('@@@'):
@@ -385,7 +410,7 @@ class AwkPyCompiler():
                 self.lineNr+=1
                 have_output=False
                 continue # line number
-            if token.startswith('@namespace'):
+            if token.startswith('@namespace') or token.startswith('@file') or token.startswith('@resuming'):
                 continue # I doubt it's needed later
             # decorate identifiers for the current namespace unless disallowed.
             # NB ns::name fails the isidentifier test so needs special processing
@@ -1436,19 +1461,11 @@ if __name__=="__main__":
     if( var~astr ) exit 1
     exit 0
 }'''
-    source=r'''
-    function squirrel() {
-        return "squeak"
-    }
-    @namespace "secret"
-    function squirrel() {
-        return "shhhh"
-    }
+    source=r'''@include "tests/add_1_in_BEGIN.awk"
+    @include "tests/add_1_in_BEGIN.awk"
     BEGIN {
-        @namespace "awk"
-        exit squirrel()
+    exit a
 }'''
     a=AwkPyCompiler()
-    code=a.compile(['-vuser::a=Z', '-vuser::c=Y', 'BEGIN {@namespace user \
-    print "A="a", C="c;}'])
+    code=a.compile(source)
     print(code)
