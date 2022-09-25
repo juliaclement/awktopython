@@ -21,160 +21,233 @@
 import pytest
 import re
 from helpers import compile_run_answer_assert
-from awkpy_runtime import AwkpyRuntimeVarOwner,AwkEmptyVar,AwkEmptyVarInstance
+from awkpy_runtime import AwkpyRuntimeVarOwner, AwkEmptyVar, AwkEmptyVarInstance
+
 
 def test_post_inc_arr_uninitialised():
-    compile_run_answer_assert(1,"""
+    compile_run_answer_assert(
+        1,
+        """
 BEGIN {
     a[2]=12
     b=a[1]++
     exit b*100+a[1]
-}""")
+}""",
+    )
+
 
 def test_pre_inc_arr_uninitialised():
-    compile_run_answer_assert(101,"""
+    compile_run_answer_assert(
+        101,
+        """
 BEGIN {
     a[2]=12
     b=++a[1]
     exit b*100+a[1]
-}""")
+}""",
+    )
+
 
 def test_post_dec_arr_uninitialised():
-    compile_run_answer_assert(-1,"""
+    compile_run_answer_assert(
+        -1,
+        """
 BEGIN {
     a[2]=12
     b=a[1]--
     exit b*100+a[1]
-}""")
+}""",
+    )
+
 
 def test_pre_dec_arr_uninitialised():
-    compile_run_answer_assert(-101,"""
+    compile_run_answer_assert(
+        -101,
+        """
 BEGIN {
     a[2]=4
     b=--a[1]
     exit b*100+a[1]
-}""")
+}""",
+    )
+
 
 def test_post_inc_arr_initialised():
-    compile_run_answer_assert(809,"""
+    compile_run_answer_assert(
+        809,
+        """
 BEGIN {
     a[1]=8
     b=a[1]++
     exit b*100+a[1]
-}""")
+}""",
+    )
+
 
 def test_pre_inc_arr_initialised():
-    compile_run_answer_assert(303,"""
+    compile_run_answer_assert(
+        303,
+        """
 BEGIN {
     a[1]=2
     b=++a[1]
     exit b*100+a[1]
-}""")
+}""",
+    )
+
 
 def test_post_dec_arr_initialised():
-    compile_run_answer_assert(908,"""
+    compile_run_answer_assert(
+        908,
+        """
 BEGIN {
     a[1]=9
     b=a[1]--
     exit b*100+a[1]
-}""")
+}""",
+    )
+
 
 def test_pre_dec_arr_initialised():
-    compile_run_answer_assert(303,"""
+    compile_run_answer_assert(
+        303,
+        """
 BEGIN {
     a[1]=4
     b=--a[1]
     exit b*100+a[1]
-}""")
+}""",
+    )
+
 
 def test_pre_inc_var_initialised():
-    compile_run_answer_assert(202,"""
+    compile_run_answer_assert(
+        202,
+        """
 BEGIN {
     a=1
     b=++a
     exit b*100+a
-}""")
+}""",
+    )
+
 
 def test_post_dec_var_initialised():
-    compile_run_answer_assert(302,"""
+    compile_run_answer_assert(
+        302,
+        """
 BEGIN {
     a=3
     b=a--
     exit b*100+a
-}""")
+}""",
+    )
+
 
 def test_post_inc_var_uninitialised():
-    compile_run_answer_assert(0,"""
+    compile_run_answer_assert(
+        0,
+        """
 BEGIN {
     b=a++
     exit b+0
-}""")
+}""",
+    )
+
 
 def test_pre_inc_var_uninitialised():
-    compile_run_answer_assert(1,"""
+    compile_run_answer_assert(
+        1,
+        """
 BEGIN {
     b=++a
     exit b+0
-}""")
+}""",
+    )
+
 
 def test_post_dec_var_uninitialised():
-    compile_run_answer_assert(102,"""
+    compile_run_answer_assert(
+        102,
+        """
 BEGIN {
     a=2
     b=a--
     exit a*100+b
-}""")
+}""",
+    )
+
 
 def test_pre_dec_var_uninitialised():
-    compile_run_answer_assert(-2,"""
+    compile_run_answer_assert(
+        -2,
+        """
 BEGIN {
     b=--a
     exit a+b
-}""")
+}""",
+    )
+
 
 def test_post_inc_var_initialised():
-    compile_run_answer_assert(201,"""
+    compile_run_answer_assert(
+        201,
+        """
 BEGIN {
     a=1
     b=a++
     exit a*100+b
-}""")
+}""",
+    )
+
 
 def test_post_dec_var_initialised2():
-    compile_run_answer_assert(708,"""
+    compile_run_answer_assert(
+        708,
+        """
 BEGIN {
     a=8
     b=a--
     exit a*100+b
-}""")
+}""",
+    )
+
 
 def test_pre_dec_var_initialised():
-    compile_run_answer_assert(909,"""
+    compile_run_answer_assert(
+        909,
+        """
 BEGIN {
     a=10
     b=--a
     exit a*100+b
-}""")
+}""",
+    )
 
-''' The following methods check that if an unknown variable is
+
+""" The following methods check that if an unknown variable is
     presented, at least the runtime doesn't crash.
     The compiler shouldn't be able to create these conditions
     so we just go straight to the runtime
-'''
+"""
 from awkpy_runtime import AwkpyRuntimeVarOwner
 
+
 def test_post_dec_var_unknown():
-    a=AwkpyRuntimeVarOwner()
-    assert a._post_dec_var('balderdash') == 0
+    a = AwkpyRuntimeVarOwner()
+    assert a._post_dec_var("balderdash") == 0
+
 
 def test_pre_dec_var_unknown():
-    a=AwkpyRuntimeVarOwner()
-    assert a._pre_dec_var('balderdash') == -1
+    a = AwkpyRuntimeVarOwner()
+    assert a._pre_dec_var("balderdash") == -1
+
 
 def test_post_inc_var_unknown():
-    a=AwkpyRuntimeVarOwner()
-    assert a._post_inc_var('balderdash') == 0
+    a = AwkpyRuntimeVarOwner()
+    assert a._post_inc_var("balderdash") == 0
+
 
 def test_pre_inc_var_unknown():
-    a=AwkpyRuntimeVarOwner()
-    assert a._pre_inc_var('balderdash') == 1
+    a = AwkpyRuntimeVarOwner()
+    assert a._pre_inc_var("balderdash") == 1
