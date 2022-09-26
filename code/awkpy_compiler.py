@@ -188,6 +188,7 @@ class Sym:
     def is_operator(self):
         return self.sym_type in [
             SymType.BINOPERATOR,
+            SymType.COMMA,
             SymType.UNIOPERATOR,
             SymType.AMBIGUOUSOPERATOR,
             SymType.LEFT_BRACKET,
@@ -828,7 +829,27 @@ class AwkPyCompiler:
                 return expr
         self.syntax_error("2 or 3 arguments")
 
-    def compile_expression(self, extra_terminators=[]):
+    def parse_parameter_list(self, extra_terminators=[], comma=SymType.COMMA, missing_index=None):
+        '''return a comma seperated list of expressions as a list translated
+           into Python & ready to insert into code'''
+        terminators = [
+            SymType.RIGHT_PAREN,
+            SymType.LEFT_BRACE,
+            SymType.RIGHT_BRACKET,
+            SymType.END_OF_INPUT,
+            SymType.STATEMENT_TERMINATOR,
+        ]
+        terminators.extend(extra_terminators)
+        answer=[]
+        if self.current_token.sym_type == SymType.LEFT_PAREN:
+            self.advance_token()
+        while self.current_token.sym_type not in terminators:
+            answer.append(self.compile_expression([comma],missing_index=missing_index))
+            if self.current_token.sym_type == comma:
+                self.advance_token()
+        return answer
+
+    def compile_expression(self, extra_terminators=[], missing_index=None):
         """Assemble components until a terminator, usually ')' encountered"""
         terminators = [
             SymType.RIGHT_PAREN,
@@ -859,7 +880,7 @@ class AwkPyCompiler:
                     if self.current_token.sym_type == SymType.RIGHT_PAREN:
                         ans.append("()")  # empty argument list
                     else:
-                        ans.append("(" + self.compile_expression() + ")")
+                        ans.append("(" + self.compile_expression(missing_index=missing_index) + ")")
                     self.advance_token()
                 elif self.current_token.sym_type == SymType.LEFT_BRACKET:
                     # We need to save some current state in case we encounter ++ or --
@@ -873,7 +894,10 @@ class AwkPyCompiler:
                     self.advance_token()
                     last_array_index = self.compile_expression()
                     self.advance_token()  # dispose ]
-                    ans.append("[" + last_array_index + "]")
+                    if missing_index is None:
+                        ans.append(f"[{last_array_index}]")
+                    else:
+                        ans.append(f'.get( {last_array_index}, {missing_index})')
                 elif self.current_token.token in ["++", "--"]:  # post_inc / post_dec
                     op = self.current_token.token
                     if self.prior_token.sym_type == SymType.VARIABLE:
@@ -916,7 +940,7 @@ class AwkPyCompiler:
                         else:
                             rhs = self.current_token.python_equivalent
                         ans.append(f"(str({lhs})+str({rhs}))")
-                    if not self.current_token.is_terminator():
+                    if not self.current_token.sym_type in terminators:
                         self.advance_token()
                 else:
                     self.syntax_error("operator")
@@ -925,11 +949,13 @@ class AwkPyCompiler:
                     self.compile_uni_operator(ans)
                 elif self.current_token.is_function():
                     ans.append(self.current_token.parser())
+                    if self.current_token.token == ')':
+                        self.advance_token()
                 elif self.current_token.is_operand():
                     ans.append(self.current_token.python_equivalent)
                 else:
                     self.syntax_error("operator or operand")
-                if not self.current_token.is_terminator():
+                if not self.current_token.sym_type in terminators:
                     self.advance_token()
             else:
                 self.syntax_error("operator or operand2")
@@ -1167,32 +1193,14 @@ class AwkPyCompiler:
 
     def compile_print_statement(self):
         self.advance_token()  # discard "print"
-        ans = "print(f'"
-        while self.current_token.sym_type != SymType.STATEMENT_TERMINATOR:
-            if self.current_token.sym_type == SymType.STRING:
-                text = self.current_token.python_equivalent[1:-1]
-                ans += text
-            elif (
-                self.current_token.is_variable()
-                and self.current_token.is_array
-                and self.lookahead_token.sym_type == SymType.LEFT_BRACKET
-            ):
-                var = self.current_token.python_equivalent
-                self.advance_token()
-                self.advance_token()
-                index = self.compile_expression()
-                ans += "{" + var + ".get(" + index + ',"")}'
-            elif self.current_token.sym_type in [SymType.VARIABLE, SymType.DOLLAR]:
-                ans += "{" + self.current_token.python_equivalent + "}"
-            elif self.current_token.sym_type == SymType.COMMA:
-                ans += "{self.OFS}"
-            else:
-                ans += f"{self.current_token.python_equivalent}"
-            self.advance_token()
+        ans = "print("
+        fields=self.parse_parameter_list(missing_index='""')
         self.consume_terminator()
-        if ans == "print(f'":  # print; == print $0;
-            ans += "{self._FLDS[0]}"
-        ans += "')"
+        if len(fields)==0: # print; == print $0;
+            ans += "self._FLDS[0]"
+        else:
+            ans += ','.join(fields)+',sep=self.OFS,end=self.ORS'
+        ans += ")"
         self.output_line(ans)
 
     def compile_block(self):
@@ -1596,8 +1604,9 @@ class AwkPyCompiler:
             SymVariable("NF", built_in=True, scalar=True),
             SymVariable("NR", built_in=True, scalar=True),
             SymVariable("OFS", built_in=True, scalar=True),
+            SymVariable("ORS", built_in=True, scalar=True),
             SymVariable("ENVIRON", built_in=True, array=True),
-            # To implement ARGIND, CONVFMT, ERRNO, FUNCTAB, OFMT, ORS, RLENGTH, RS, RSTART, SUBSEP,SYMTAB
+            # To implement ARGIND, CONVFMT, ERRNO, FUNCTAB, OFMT, RLENGTH, RS, RSTART, SUBSEP,SYMTAB
             # functions = ??
             # __init__ = ??
             Sym("EndOfInput", SymType.END_OF_INPUT),
@@ -1705,11 +1714,6 @@ if __name__ == "__main__":
     a[1]="<>"
     print a[1] a[1]
     }"""
-    source = r"""BEGIN {
-    a[1]="<>"
-    b = a[1] a[1]
-    print b
-    }"""
     source = r"""END {
     OFS="-"
     l="left";
@@ -1735,6 +1739,17 @@ if __name__ == "__main__":
     @include "tests/add_1_in_BEGIN.awk"
     BEGIN {
     exit a
+}"""
+    source = r"""BEGIN {
+    var="start"
+    arr[0]="zero"
+    arr[1]="one"
+    print "var="var,"arr=" arr[0],arr[1]
+    exit 0
+}"""
+    source = r"""BEGIN {
+    y=int(3.2)
+    exit y
 }"""
     a = AwkPyCompiler()
     code = a.compile(source)

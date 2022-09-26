@@ -53,6 +53,19 @@ def test_print_number(capsys):
     )
 
 
+def test_print_fields(capsys):
+    compile_run_capsys_assert(
+        capsys, "1>>B>>C<<", '''BEGIN {
+            OFS=">>"
+            ORS="<<"
+            a=1
+            b="B"
+            c[1]="C"
+            print a,b,c[1]
+        }''', [full_file_name("lines.txt")]
+    )
+
+
 # check(parser,compiler_options,runtime_options,variables)
 def test_arg_debug():
     check_arg_parser(True, lambda p, c, r, v: p.debug, ["-ofilename", "{a=b;}", "-d"])

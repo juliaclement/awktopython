@@ -471,6 +471,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         self.NF = 0
         self.NR = 0
         self.OFS = "\t"
+        self.ORS = "\n"
         self._nextfile = False
         self.ENVIRON = defaultdict(AwkEmptyVar.instance, os.environ)
         # if no statements are present in the main loop,
