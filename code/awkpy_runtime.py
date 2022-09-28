@@ -22,7 +22,7 @@ import re
 import subprocess
 import os
 from pathlib import Path
-from awkpy_common import AwkPyArgParser
+from awkpy_common import AwkPyArgParser,AwkPySprintfConversion
 
 exit_code = 0
 
@@ -461,6 +461,67 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         set_exit_code(AwkpyRuntimeWrapper._ans)
         return AwkpyRuntimeWrapper._ans
 
+
+    def sprintf(self, awk:str, *args:list):
+        output=[]
+        input_field_nr=-1
+
+        while awk != '':
+            match=self.sprintf_format_regex.search(awk)            
+            if not match:
+                output.append(awk)
+                break
+            start,length=match.regs[0]
+            if start > 0:
+                output.append(awk[:start])
+                awk=awk[start:]
+                continue
+            token=awk[0:length]
+            if repl:=self.sprintf_replacements.get(token,None):
+                output.append(repl)
+            elif len(token) < 2:
+                print("Ooops got {0}".format(token))
+            else: # %...[letter]
+                match=self.sprintf_field_regex.findall(token)
+                if match and len(match) > 0 :
+                    parameter,flags,width,precision,pftype = match[0]
+                    parmtype=AwkPySprintfConversion.all_conversions[pftype]
+                    # need to process width/precesion before parameter
+                    # as they can consume input parameters
+                    precision=parmtype.default_precision if precision=='' else precision
+                    if width != '' or precision != '':
+                        if width=='':
+                            width='0'
+                        elif width=='*':
+                            input_field_nr += 1
+                            width=str(int(args[input_field_nr]))
+                        if precision != '':
+                            precision = precision.lstrip('.')
+                            if precision=='*':
+                                input_field_nr += 1
+                                precision=str(int(args[input_field_nr]))
+                            width += "." + precision + 'f'
+                    if parameter=='':
+                        input_field_nr += 1
+                        param_nr=input_field_nr
+                    else:
+                        param_nr=int(parameter[0:-1])-1
+                    paramvalue=parmtype.dynamic(args[param_nr])
+                    if len(width) > 0:
+                        if '-' in flags: # left align numbers
+                            width=':<' + width
+                        else:
+                            width=':>' + width
+                        formatter='{0'+width+'}'
+                        token=formatter.format(paramvalue)
+                    else:
+                        token = str(paramvalue)
+                else:
+                    print("Internal error, can't refind {token}")
+                output.append(token)
+            awk=awk[length:]
+        return ''.join(output)
+
     def __init__(self):
         super().__init__()
         self.ARGC = 0
@@ -472,11 +533,19 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         self.NR = 0
         self.OFS = "\t"
         self.ORS = "\n"
+        self.CONVFMT = '%.6g'
+        self.OFMT = '%.6g'
         self._nextfile = False
         self.ENVIRON = defaultdict(AwkEmptyVar.instance, os.environ)
         # if no statements are present in the main loop,
         # input files are not processed
         self._has_mainloop = False
+        # used by sprintf
+        self.sprintf_require_int = AwkPySprintfConversion.all_conversions['d']
+        fieldspec = r"([0-9]*\$)?([-+ 0'#])?([1-9*][0-9]*)?([.][0-9*]+)?([aAcdeEfFgGiosuxX])"
+        self.sprintf_field_regex = re.compile(fieldspec)
+        self.sprintf_format_regex = re.compile(r"([\\%]%)|([{}])|(%"+fieldspec+")")
+        self.sprintf_replacements = {r'\%':'%','%%':'%','{':'{','}':'}'}
 
 
 def set_exit_code(code):

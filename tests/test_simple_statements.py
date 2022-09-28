@@ -53,6 +53,18 @@ def test_print_number(capsys):
     )
 
 
+def test_printf_number(capsys):
+    compile_run_capsys_assert(
+        capsys, "Line.1\n", '$1=="Line.1" {printf "%s\n", $1}', [full_file_name("lines.txt")]
+    )
+
+
+def test_printf_number_bracket(capsys):
+    compile_run_capsys_assert(
+        capsys, "Line.1\n", '$1=="Line.1" {printf( "%s\n", $1);}', [full_file_name("lines.txt")]
+    )
+
+
 def test_print_fields(capsys):
     compile_run_capsys_assert(
         capsys, "1>>B>>C<<", '''BEGIN {

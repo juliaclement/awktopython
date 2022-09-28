@@ -65,8 +65,9 @@ block statement: ({ statement;statement;...}) (nawk) fully implemented
 
 **for**(initialiser, condition, incr) statement (nawk) fully implemented
 
-**print** (to stdout) (nawk) implemented, may not have all edge cases
-implemented
+**print** (to stdout) (nawk) implemented, may not have all edge cases implemented.
+
+**printf** (to stdout) (nawk) implemented as a simple wrapper around sprintf, may not have all edge cases implemented.
 
 other I/O not implemented yet. Priority of each case needs to be determined.
 
@@ -113,10 +114,11 @@ var=value variable-assignment arguments (since early awk) implemented.
 
 #### POSIX
 
-Implemented: atan2, cos, exp, int, length, rand, srand, sin, split, substr, sqrt, tolower, toupper
+Implemented: atan2, cos, exp, int, length, rand, sprintf(*), srand, sin, split, substr, sqrt, tolower, toupper
 
-Not Implemented: close, gsub, index, log, match, sprintf, sub, system.
-All high priority.
+Not Implemented: close, gsub, index, log, match, sub, system. All high priority.
+
+(*) sprintf does not currently implement the %e/%E specifier so %e, %E, %g, and %G are treated identically to %f
 
 #### GAWK extensions
 

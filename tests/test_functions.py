@@ -169,6 +169,308 @@ BEGIN {
     )
 
 
+def test_sprintf_compiled_d():
+    compile_run_answer_assert(
+        '7',
+        """
+BEGIN {
+    a=7
+    y=sprintf("%d",a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_compiled_d_left_aligned():
+    compile_run_answer_assert(
+        '7  x',
+        """
+BEGIN {
+    a=7
+    y=sprintf("%-3dx",a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_compiled_d_pre_suffix():
+    compile_run_answer_assert(
+        '>>7<<',
+        """
+BEGIN {
+    a=7
+    y=sprintf(">>%d<<",a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_compiled_f():
+    compile_run_answer_assert(
+        '2.340000',
+        """
+BEGIN {
+    a=2.34
+    y=sprintf("%8.6f",a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_compiled_f_4dp():
+    compile_run_answer_assert(
+        '2.3400',
+        """
+BEGIN {
+    a=2.34
+    y=sprintf("%.4f",a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_compiled_f_width_in_args():
+    compile_run_answer_assert(
+        ' 12.3450',
+        """
+BEGIN {
+    a=12.345
+    y=sprintf("%*.*f",8,4,a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_compiled_i(): # POSIX spec says synonym for d
+    compile_run_answer_assert(
+        '7',
+        """
+BEGIN {
+    a=7
+    y=sprintf("%i",a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_compiled_o():
+    compile_run_answer_assert(
+        '23',
+        """
+BEGIN {
+    a=19
+    y=sprintf("%o",a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_compiled_s():
+    compile_run_answer_assert(
+        '7-Up',
+        """
+BEGIN {
+    a="7-Up"
+    y=sprintf("%s",a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_compiled_s_repls():
+    compile_run_answer_assert(
+        '%{7-Up}%',
+        """
+BEGIN {
+    a="7-Up"
+    y=sprintf("%%{%s}\\%",a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_compiled_s_using_count():
+    compile_run_answer_assert(
+        'Two One',
+        """
+BEGIN {
+    a="One"
+    b="Two"
+    y=sprintf("%2$s %1$s",a,b)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_compiled_x():
+    compile_run_answer_assert(
+        '13',
+        """
+BEGIN {
+    a=19
+    y=sprintf("%x",a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_interpreted_d():
+    compile_run_answer_assert(
+        '7',
+        """
+BEGIN {
+    a=7
+    fmt="%d"
+    y=sprintf(fmt,a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_interpreted_d_left_aligned():
+    compile_run_answer_assert(
+        '7  x',
+        """
+BEGIN {
+    a=7
+    fmt="%-3dx"
+    y=sprintf(fmt,a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_interpreted_d_pre_suffix():
+    compile_run_answer_assert(
+        '>>7<<',
+        """
+BEGIN {
+    a=7
+    fmt=">>%d<<"
+    y=sprintf(fmt,a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_interpreted_f():
+    compile_run_answer_assert(
+        '12.345000',
+        """
+BEGIN {
+    a=12.345
+    fmt="%f"
+    y=sprintf(fmt,a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_interpreted_f_width_in_args():
+    compile_run_answer_assert(
+        ' 12.3450',
+        """
+BEGIN {
+    a=12.345
+    fmt="%*.*f"
+    y=sprintf(fmt,8,4,a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_interpreted_f_4dp():
+    compile_run_answer_assert(
+        '12.3450',
+        """
+BEGIN {
+    a=12.345
+    fmt="%.4f"
+    y=sprintf(fmt,a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_interpreted_i(): # POSIX spec says synonym for d
+    compile_run_answer_assert(
+        '7',
+        """
+BEGIN {
+    a=7
+    fmt="%i"
+    y=sprintf(fmt,a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_interpreted_o():
+    compile_run_answer_assert(
+        '23',
+        """
+BEGIN {
+    a=19
+    fmt="%o"
+    y=sprintf(fmt,a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_interpreted_s():
+    compile_run_answer_assert(
+        '7-Up',
+        """
+BEGIN {
+    a="7-Up"
+    fmt="%s"
+    y=sprintf(fmt,a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_interpreted_s_repls():
+    compile_run_answer_assert(
+        '%{7-Up}%',
+        """
+BEGIN {
+    a="7-Up"
+    fmt="%%{%s}%%"
+    y=sprintf(fmt,a)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_interpreted_s_using_count():
+    compile_run_answer_assert(
+        'Two One',
+        """
+BEGIN {
+    a="One"
+    b="Two"
+    fmt="%2$s %1$s"
+    y=sprintf(fmt,a,b)
+    exit y
+}""",
+    )
+
+
+def test_sprintf_interpreted_x():
+    compile_run_answer_assert(
+        '13',
+        """
+BEGIN {
+    a=19
+    fmt="%x"
+    y=sprintf(fmt,a)
+    exit y
+}""",
+    )
+
+
 def test_sqrt_function_call():
     compile_run_answer_assert(
         Fuzzy(4, 0.00001),
