@@ -37,7 +37,7 @@ except:
     path = Path(__file__).parent.parent / "code"
     sys.path.append(str(path))
     from awkpy import run
-from awkpy_args import AwkPyArgParser
+from awkpy_common import AwkPyArgParser
 from awkpy_compiler import AwkPyCompiler
 from awkpy_runtime import (
     AwkEmptyVar,

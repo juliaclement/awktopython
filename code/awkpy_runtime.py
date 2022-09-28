@@ -22,7 +22,7 @@ import re
 import subprocess
 import os
 from pathlib import Path
-from awkpy_args import AwkPyArgParser
+from awkpy_common import AwkPyArgParser
 
 exit_code = 0
 

@@ -19,7 +19,7 @@
 import sys
 import os
 from awkpy_compiler import AwkPyCompiler
-from awkpy_args import AwkPyArgParser
+from awkpy_common import AwkPyArgParser
 
 # ----
 def run(args):

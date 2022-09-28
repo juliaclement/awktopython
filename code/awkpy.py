@@ -34,7 +34,7 @@ from awkpy_runtime import (
     AwkEmptyVar,
     AwkEmptyVarInstance,
 )
-from awkpy_args import AwkPyArgParser
+from awkpy_common import AwkPyArgParser
 
 
 def run(args):
