@@ -72,6 +72,13 @@ class AwkPyArgParser:
                         self.output_file_name = args[i]
                     else:
                         self.output_file_name = curr_arg[2:]
+                elif curr_arg[1] == "F":  # set variable FS
+                    if len(curr_arg) == 2:
+                        i += 1
+                        self.variables.append("-vFS=" + args[i])
+                    else:
+                        curr_arg=curr_arg[2:]
+                        self.variables.append('-vFS=' + curr_arg)
                 elif curr_arg[1] == "v":  # set variable
                     if len(curr_arg) == 2:
                         i += 1

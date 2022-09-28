@@ -104,7 +104,7 @@ affects arrays
 
 var=value variable-assignment arguments (since early awk) implemented. 
 
-\-F x, planned low or medium priority (equivalent to -v FS=x)
+\-F x, implemented by translating to -v FS=x
 
 ### Environment Variables
 

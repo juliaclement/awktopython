@@ -1502,6 +1502,7 @@ class AwkPyCompiler:
                     except:
                         val = 'r"""' + val + '"""'
                     sym.init = val
+                    sym.built_in = False
             else:
                 files.append(arg)
             i += 1
@@ -1558,7 +1559,7 @@ class AwkPyCompiler:
         if self.do_debug:
             print([t.token for l, t in self.tokens])
         self.required_library_items["collections"]["defaultdict"] = True
-        prefix = ["#! /usr/bin/python3"]
+        prefix = ["#! /usr/bin/env python3"]
         for (
             item
         ) in "AwkpyRuntimeVarOwner,AwkpyRuntimeWrapper,AwkNext,AwkNextFile,AwkExit,AwkEmptyVar,AwkEmptyVarInstance".split(
@@ -1703,11 +1704,13 @@ class AwkPyCompiler:
             #
             SymVariable("ARGC", built_in=True, scalar=True),
             SymVariable("ARGV", built_in=True, array=True),
+            SymVariable("CONVFMT", built_in=True, scalar=True),
             SymVariable("FILENAME", built_in=True, scalar=True),
             SymVariable("FNR", built_in=True, scalar=True),
             SymVariable("FS", built_in=True, scalar=True),
             SymVariable("NF", built_in=True, scalar=True),
             SymVariable("NR", built_in=True, scalar=True),
+            SymVariable("OFMT", built_in=True, scalar=True),
             SymVariable("OFS", built_in=True, scalar=True),
             SymVariable("ORS", built_in=True, scalar=True),
             SymVariable("ENVIRON", built_in=True, array=True),
@@ -1864,12 +1867,10 @@ if __name__ == "__main__":
     y=sprintf(fmt,a)
     exit y
 }"""
-    source = r"""BEGIN {
-    a="7-Up"
-    fmt="%%{%s}\\%"
-    y=sprintf(fmt,a)
-    exit y
-}"""
+    # a = AwkPyCompiler()
+    # code = a.compile(source)
+    source = [ '-v', 'FS=X', '-v', 'a=b', '{print $1,$2;print a,FS;}' ]
+
     a = AwkPyCompiler()
     code = a.compile(source)
     print(code)
