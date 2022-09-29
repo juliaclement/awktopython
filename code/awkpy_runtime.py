@@ -537,7 +537,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         self.FS = " "
         self.NF = 0
         self.NR = 0
-        self.OFS = "\t"
+        self.OFS = " "
         self.ORS = "\n"
         self.CONVFMT = '%.6g'
         self.OFMT = '%.6g'

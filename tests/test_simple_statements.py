@@ -65,6 +65,36 @@ def test_printf_number_bracket(capsys):
     )
 
 
+def test_delete_array(capsys):
+    compile_run_capsys_assert(
+        capsys, "4 5 \n", '''BEGIN {
+    a[1] = 1.234
+    a[2] = 2.345
+    a[3] = 3.456
+    delete a
+    a[4] = 4.567
+    a[5] = 5.678
+    for( i in a ) {
+        printf("%d%s",i,OFS)
+    }
+    print ""
+}''')
+
+
+def test_delete_array_element(capsys):
+    compile_run_capsys_assert(
+        capsys, "1 3 \n", '''BEGIN {
+    a[1] = 1.234
+    a[2] = 2.345
+    a[3] = 3.456
+    delete a[2]
+    for( i in a ) {
+        printf("%d%s",i,OFS)
+    }
+    print ""
+}''')
+
+
 def test_print_fields(capsys):
     compile_run_capsys_assert(
         capsys, "1>>B>>C<<", '''BEGIN {

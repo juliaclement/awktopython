@@ -55,7 +55,7 @@ simple statement: (expression;) (nawk) fully implemented
 
 block statement: ({ statement;statement;...}) (nawk) fully implemented
 
-**delete**: not implemented: medium priority
+**delete**: implemented both whole array and single element.
 
 **if** (condition) statement \[else statement\] (nawk) fully implemented
 

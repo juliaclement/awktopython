@@ -1183,6 +1183,19 @@ class AwkPyCompiler:
         self.output_line(f"while {condition}:")
         self.compile_indented_statement()
 
+    def compile_delete_command(self):
+        self.advance_token_require(sym_types=[SymType.VARIABLE])  # discard "delete"
+        var=self.current_token
+        self.advance_token()
+        if self.current_token.sym_type == SymType.LEFT_BRACKET:
+            self.advance_token()
+            index=self.compile_expression([SymType.RIGHT_BRACKET])
+            self.output_line(f"del {var.python_equivalent}[{index}]")
+            if self.current_token.sym_type == SymType.RIGHT_BRACKET:
+                self.advance_token()
+        else:
+            self.output_line(f"{var.python_equivalent}.clear()")
+
     def compile_do_statement(self):
         """
         AWK has a C style do statement, Python does not, so
@@ -1757,6 +1770,7 @@ class AwkPyCompiler:
             #
             SymStatement("break", lambda: self.compile_simple_command()),
             SymStatement("continue", lambda: self.compile_simple_command()),
+            SymStatement("delete", lambda: self.compile_delete_command()),
             SymStatement("do", lambda: self.compile_do_statement()),
             SymStatement("exit", lambda: self.compile_exit_statement()),
             SymStatement("for", lambda: self.compile_for_statement()),
@@ -1783,7 +1797,6 @@ class AwkPyCompiler:
             #
             #   Unimplemented statements
             #
-            Sym("delete", SymType.RESERVED_WORD),
             Sym("getline", SymType.RESERVED_WORD),
             Sym("in", SymType.RESERVED_WORD),
             #
@@ -1867,7 +1880,18 @@ if __name__ == "__main__":
     y=sprintf("%e",a)
     exit y
 }"""
-    source = r"""BEGIN {a=1.23;printf("%1$e %1$f %1$s\n",a,a);}"""
+    source = r"""BEGIN {
+    a[1] = 1.234
+    a[2] = 2.345
+    a[3] = 3.456
+    delete a
+    a[4] = 4.567
+    a[5] = 5.678
+    for( i in a ) {
+        printf("%d%s",i,OFS)
+    }
+    print ""
+}"""
     a = AwkPyCompiler()
     code = a.compile(source)
     print(code)
