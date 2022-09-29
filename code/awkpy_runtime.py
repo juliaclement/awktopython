@@ -413,6 +413,12 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                                     break
                         self.ENDFILE()
 
+    def _format_g(self,raw_value)->str:
+        value=float(raw_value)
+        sci_str = f'{value:e}'
+        float_str = f'{value}'
+        return sci_str if len(sci_str) < len(float_str) else float_str
+
     def _run(self, argv):
         options = []
         variables = []
@@ -500,7 +506,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                             if precision=='*':
                                 input_field_nr += 1
                                 precision=str(int(args[input_field_nr]))
-                            width += "." + precision + 'f'
+                            width += "." + precision
                     if parameter=='':
                         input_field_nr += 1
                         param_nr=input_field_nr
@@ -512,7 +518,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                             width=':<' + width
                         else:
                             width=':>' + width
-                        formatter='{0'+width+'}'
+                        formatter='{0'+width+parmtype.format_sfx+'}'
                         token=formatter.format(paramvalue)
                     else:
                         token = str(paramvalue)

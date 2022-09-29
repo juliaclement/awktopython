@@ -100,13 +100,21 @@ class AwkPyArgParser:
             i += 1
 
 
+def _format_g(raw_value)->str:
+    value=float(raw_value)
+    sci_str = f'{value:e}'
+    float_str = f'{value}'
+    return sci_str if len(sci_str) < len(float_str) else float_str
+
+
 class AwkPySprintfConversion():
     '''List of printf/sprintf conversion commands'''
-    def __init__(self,char,static,dynamic,default_precision=''):
+    def __init__(self,char,static,dynamic,default_precision='',format_sfx=''):
         self.char = char
         self.static = static
         self.dynamic = dynamic
         self.default_precision = default_precision
+        self.format_sfx = format_sfx
 
 '''All conversion specifiers in the POSIX printf families.
     n & p are tagged as omitted as they are in the POSIX C
@@ -114,15 +122,15 @@ class AwkPySprintfConversion():
     regarded as unsafe, & p is highly unlikely to be useful '''
 AwkPySprintfConversion.all_conversions={
     'a' : AwkPySprintfConversion('a', 'hex(float({}))[2:]',  lambda v: hex(float(v))[2:] ),
-    'A' : AwkPySprintfConversion('A', 'hex(float{}))[2:].lower()',  lambda v: hex(float(v))[2:].lower() ),
+    'A' : AwkPySprintfConversion('A', 'hex(float{}))[2:].upper()',  lambda v: hex(float(v))[2:].upper() ),
     'c' : AwkPySprintfConversion('c', 'char({})',  lambda v: str(v)[0] ),
     'd' : AwkPySprintfConversion('d', 'int({})',  lambda v: int(v) ),
-    'e' : AwkPySprintfConversion('e', 'float({})',  lambda v: float(v),default_precision='6' ),
-    'E' : AwkPySprintfConversion('E', 'float({})',  lambda v: float(v),default_precision='6' ),
-    'f' : AwkPySprintfConversion('f', 'float({})',  lambda v: float(v),default_precision='6' ),
-    'F' : AwkPySprintfConversion('F', 'float({})',  lambda v: float(v),default_precision='6' ),
-    'g' : AwkPySprintfConversion('g', 'float({})',  lambda v: float(v) ),
-    'G' : AwkPySprintfConversion('G', 'float({})',  lambda v: float(v) ),
+    'e' : AwkPySprintfConversion('e', 'float({})',  lambda v: float(v),default_precision='6', format_sfx='e' ),
+    'E' : AwkPySprintfConversion('E', 'float({})',  lambda v: float(v),default_precision='6', format_sfx='E' ),
+    'f' : AwkPySprintfConversion('f', 'float({})',  lambda v: float(v),default_precision='6', format_sfx='f' ),
+    'F' : AwkPySprintfConversion('F', 'float({})',  lambda v: float(v),default_precision='6', format_sfx='F' ),
+    'g' : AwkPySprintfConversion('g', 'self._format_g({})',  lambda v: _format_g(v) ),
+    'G' : AwkPySprintfConversion('G', 'self._format_g({}).upper()',  lambda v: _format_g(v).upper() ),
     'i' : AwkPySprintfConversion('i', 'int({})',  lambda v: int(v) ),
     # unsafe 'n' : AwkPySprintfConversion('n', '',  lambda v: v ),
     'o' : AwkPySprintfConversion('o', 'oct({})[2:]',  lambda v: oct(v)[2:] ),

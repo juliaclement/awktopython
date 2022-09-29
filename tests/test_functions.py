@@ -205,6 +205,18 @@ BEGIN {
     )
 
 
+def test_sprintf_compiled_e():
+    compile_run_answer_assert(
+        '2.340000e-01',
+        """
+BEGIN {
+    a=0.234
+    y=sprintf("%e",a)
+    exit y
+}""",
+    )
+
+
 def test_sprintf_compiled_f():
     compile_run_answer_assert(
         '2.340000',
@@ -214,6 +226,27 @@ BEGIN {
     y=sprintf("%8.6f",a)
     exit y
 }""",
+    )
+
+
+def test_sprintf_compiled_g_to_f():
+    compile_run_answer_assert(
+        '2112728.4',
+        r"""BEGIN{ exit sprintf("%g", 2112728.4);}""",
+    )
+
+
+def test_sprintf_compiled_g_to_e():
+    compile_run_answer_assert(
+        '2.112728e+14',
+        r"""BEGIN{ exit sprintf("%g", 211272800000000.4);}""",
+    )
+
+
+def test_sprintf_compiled_G_to_E():
+    compile_run_answer_assert(
+        '2.112728E+14',
+        r"""BEGIN{ exit sprintf("%G", 211272800000000.4);}""",
     )
 
 
@@ -238,6 +271,27 @@ BEGIN {
     y=sprintf("%*.*f",8,4,a)
     exit y
 }""",
+    )
+
+
+def test_sprintf_compiled_g_to_f():
+    compile_run_answer_assert(
+        '2112728.4',
+        r"""BEGIN{ fmt="%g"; exit sprintf(fmt, 2112728.4);}""",
+    )
+
+
+def test_sprintf_compiled_g_to_e():
+    compile_run_answer_assert(
+        '2.112728e+14',
+        r"""BEGIN{ fmt="%g"; exit sprintf(fmt, 211272800000000.4);}""",
+    )
+
+
+def test_sprintf_compiled_G_to_E():
+    compile_run_answer_assert(
+        '2.112728E+14',
+        r"""BEGIN{ fmt="%G"; exit sprintf(fmt, 211272800000000.4);}""",
     )
 
 
@@ -311,6 +365,13 @@ BEGIN {
     y=sprintf("%x",a)
     exit y
 }""",
+    )
+
+
+def test_sprintf_compiled_dollar():
+    compile_run_answer_assert(
+        '1 1.230000 1.23',
+        r"""BEGIN {a=1.23;exit sprintf("%1$d %1$f %1$s",a);}""",
     )
 
 
@@ -468,6 +529,13 @@ BEGIN {
     y=sprintf(fmt,a)
     exit y
 }""",
+    )
+
+
+def test_sprintf_interpreted_dollar():
+    compile_run_answer_assert(
+        '1 1.230000 1.23',
+        r"""BEGIN {fmt="%1$d %1$f %1$s";a=1.23;exit sprintf(fmt,a);}""",
     )
 
 

@@ -114,11 +114,9 @@ var=value variable-assignment arguments (since early awk) implemented.
 
 #### POSIX
 
-Implemented: atan2, cos, exp, int, length, rand, sprintf(*), srand, sin, split, substr, sqrt, tolower, toupper
+Implemented: atan2, cos, exp, int, length, rand, sprintf, srand, sin, split, substr, sqrt, tolower, toupper
 
 Not Implemented: close, gsub, index, log, match, sub, system. All high priority.
-
-(*) sprintf does not currently implement the %e/%E specifier so %e, %E, %g, and %G are treated identically to %f
 
 #### GAWK extensions
 

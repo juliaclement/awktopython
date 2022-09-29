@@ -201,6 +201,21 @@ def test_minus_F(capsys,monkeypatch):
     assert captured.out == "a%b cd\n"
 
 
+def test_minus_F_2(capsys,monkeypatch):
+    monkeypatch.setattr("sys.stdin", io.StringIO("a@b cd"))
+    awkpy.run(
+        [
+            "awkpy_out",
+            "-F",
+            "@",
+            "-vOFS=%",
+            '{print $1,$2}'
+        ]
+    )
+    captured = capsys.readouterr()
+    assert captured.out == "a%b cd\n"
+
+
 def test_minus_F_runtime(capsys,monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("a@b cd"))
     awkpy.run(
@@ -209,6 +224,22 @@ def test_minus_F_runtime(capsys,monkeypatch):
             '{print $1,$2}',
             "-Wr",
             "-F@",
+            "-vOFS=%"
+        ]
+    )
+    captured = capsys.readouterr()
+    assert captured.out == "a%b cd\n"
+
+
+def test_minus_F_runtime_2(capsys,monkeypatch):
+    monkeypatch.setattr("sys.stdin", io.StringIO("a@b cd"))
+    awkpy.run(
+        [
+            "awkpy_out",
+            '{print $1,$2}',
+            "-Wr",
+            "-F",
+            "@",
             "-vOFS=%"
         ]
     )

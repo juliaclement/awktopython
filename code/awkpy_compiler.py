@@ -829,7 +829,7 @@ class AwkPyCompiler:
                 return input_field_nr
             if alias := aliases[input_field_nr].get(required,None):
                 return alias
-            new_index=len(input_field_nr)
+            new_index=len(args)
             args.append(orig_args[input_field_nr])
             formatted_args.append(required)
             aliases.append({})
@@ -873,7 +873,7 @@ class AwkPyCompiler:
                                 input_field_nr += 1
                                 precision_field=permute_field(input_field_nr,self.sprintf_require_int)
                                 precision='{'+str(precision_field)+'}'
-                            width += "." + precision + 'f'
+                            width += "." + precision
                     if parameter=='':
                         input_field_nr += 1
                         param_nr=input_field_nr
@@ -886,7 +886,7 @@ class AwkPyCompiler:
                             parameter+=':<' + width
                         else:
                             parameter+=':>' + width
-                    token = '{' + parameter + '}'
+                    token = '{' + parameter + parmtype.format_sfx + '}'
                 else:
                     print("Internal error, can't refind {token}")
                 output.append(token)
@@ -1305,7 +1305,7 @@ class AwkPyCompiler:
         if self.current_token.sym_type == SymType.RIGHT_PAREN:
             self.advance_token()
         self.consume_terminator()
-        ans += ")"
+        ans += ",end='')"
         self.output_line(ans)
 
     def compile_block(self):
@@ -1820,11 +1820,6 @@ if __name__ == "__main__":
     exit y[1]
     }"""
     source = r"""BEGIN {
-    a="<>"
-    b = a a
-    print b
-    }"""
-    source = r"""BEGIN {
     a[1]="<>"
     print a[1] a[1]
     }"""
@@ -1867,10 +1862,12 @@ if __name__ == "__main__":
     y=sprintf(fmt,a)
     exit y
 }"""
-    # a = AwkPyCompiler()
-    # code = a.compile(source)
-    source = [ '-v', 'FS=X', '-v', 'a=b', '{print $1,$2;print a,FS;}' ]
-
+    source = r"""BEGIN {
+    a=0.234
+    y=sprintf("%e",a)
+    exit y
+}"""
+    source = r"""BEGIN {a=1.23;printf("%1$e %1$f %1$s\n",a,a);}"""
     a = AwkPyCompiler()
     code = a.compile(source)
     print(code)
