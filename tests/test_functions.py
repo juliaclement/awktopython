@@ -251,6 +251,16 @@ def test_gsub_replace_dollar1():
     )
 
 
+def test_log_function_call():
+    compile_run_answer_assert(
+        Fuzzy(1, 0.001),
+        """BEGIN {
+    y=log(2.718281828459045)
+    exit y
+}""",
+    )
+
+
 # compiling for sub & gsub is identical except for
 # the maximum number of replacements
 # Just testing two simple cases

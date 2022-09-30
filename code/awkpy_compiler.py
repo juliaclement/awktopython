@@ -705,7 +705,6 @@ class AwkPyCompiler:
     def compile_regex(self, variable, test):
         """pattern match variable against next"""
         pfx, sfx = (" not (", ")") if test == "!~" else (" ", "")
-        pattern = ""
         if self.current_token.token[0] != "/" and not self.current_token.is_regex():
             self.advance_token()  # get rid of operator
         if self.current_token.is_regex():
@@ -1954,8 +1953,8 @@ if __name__ == "__main__":
     print $0,"->",x," ",nc,"changes"
 }"""
     source = r"""BEGIN {
-    if( "start"~"a" ) exit 1
-    exit 0
+    y=log(2.718281828459045)
+    exit y
 }"""
     a = AwkPyCompiler()
     code = a.compile(source)
