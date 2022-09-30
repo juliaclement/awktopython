@@ -75,5 +75,15 @@ def test_statements_at_file_level_are_blocks_2():
     compile_catch("""(xxxxx=xxxxxx*3);""")
 
 
-def test_regex_starts_with_slash():
-    compile_catch("""{if ($1~"string") print $0}""")
+def test_pattern_is_string_or_regex():
+    compile_catch("""{if ($1~323) print $0}""")
+
+
+def test_file_cant_be_sourced_and_compiled():
+    compile_catch(
+        [
+            "-ftests/add_1_in_BEGIN.awk",
+            """@include "tests/add_1_in_BEGIN.awk"
+    {if ($1~323) print $0}""",
+        ]
+    )

@@ -97,7 +97,7 @@ def compile_run_answer_assert(expected, awk: str, files: list = [empty_txt]):
         args.append(awk)
     args.extend(files)
     ans = run(args)
-    msg=f'Expected "{expected}", Received "{ans}"'
+    msg = f'Expected "{expected}", Received "{ans}"'
     assert ans == expected, msg
 
 

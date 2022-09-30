@@ -55,19 +55,27 @@ def test_print_number(capsys):
 
 def test_printf_number(capsys):
     compile_run_capsys_assert(
-        capsys, '''Line.1''', '''$1=="Line.1" {printf "%s", $1}''', [full_file_name("lines.txt")]
+        capsys,
+        """Line.1""",
+        """$1=="Line.1" {printf "%s", $1}""",
+        [full_file_name("lines.txt")],
     )
 
 
 def test_printf_number_bracket(capsys):
     compile_run_capsys_assert(
-        capsys, "Line.1", '$1=="Line.1" {printf( "%s", $1);}', [full_file_name("lines.txt")]
+        capsys,
+        "Line.1",
+        '$1=="Line.1" {printf( "%s", $1);}',
+        [full_file_name("lines.txt")],
     )
 
 
 def test_delete_array(capsys):
     compile_run_capsys_assert(
-        capsys, "4 5 \n", '''BEGIN {
+        capsys,
+        "4 5 \n",
+        """BEGIN {
     a[1] = 1.234
     a[2] = 2.345
     a[3] = 3.456
@@ -78,12 +86,15 @@ def test_delete_array(capsys):
         printf("%d%s",i,OFS)
     }
     print ""
-}''')
+}""",
+    )
 
 
 def test_delete_array_element(capsys):
     compile_run_capsys_assert(
-        capsys, "1 3 \n", '''BEGIN {
+        capsys,
+        "1 3 \n",
+        """BEGIN {
     a[1] = 1.234
     a[2] = 2.345
     a[3] = 3.456
@@ -92,19 +103,23 @@ def test_delete_array_element(capsys):
         printf("%d%s",i,OFS)
     }
     print ""
-}''')
+}""",
+    )
 
 
 def test_print_fields(capsys):
     compile_run_capsys_assert(
-        capsys, "1>>B>>C<<", '''BEGIN {
+        capsys,
+        "1>>B>>C<<",
+        """BEGIN {
             OFS=">>"
             ORS="<<"
             a=1
             b="B"
             c[1]="C"
             print a,b,c[1]
-        }''', [full_file_name("lines.txt")]
+        }""",
+        [full_file_name("lines.txt")],
     )
 
 
@@ -242,6 +257,18 @@ def test_regex():
 BEGIN {
     var="start"
     if( var~/a/ ) exit 1
+    exit 0
+}
+    """,
+    )
+
+
+def test_regex_in_string():
+    compile_run_answer_assert(
+        1,
+        """
+BEGIN {
+    if( "start"~"a" ) exit 1
     exit 0
 }
     """,

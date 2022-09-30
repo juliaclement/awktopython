@@ -26,6 +26,7 @@ from helpers import (
     compile_run_capsys_assert,
     compile_run,
     Fuzzy,
+    full_file_name,
 )
 from awkpy_compiler import AwkPyCompiler
 
@@ -158,6 +159,123 @@ BEGIN {
     )
 
 
+def test_gsub_call_basic_nr_changes():
+    compile_run_answer_assert(
+        2,
+        """BEGIN {
+    x="Line.1"
+    nc=gsub(/[aeiou]/,"(&)",x)
+    exit nc
+}""",
+    )
+
+
+def test_gsub_call_basic_txt_changes():
+    compile_run_answer_assert(
+        "L(i)n(e).1",
+        """BEGIN {
+    x="Line.1"
+    nc=gsub(/[aeiou]/,"(&)",x)
+    exit x
+}""",
+    )
+
+
+def test_gsub_call_string_basic_txt_changes():
+    compile_run_answer_assert(
+        "L(i)n(e).1",
+        """BEGIN {
+    x="Line.1"
+    nc=gsub("[aeiou]","(&)",x)
+    exit x
+}""",
+    )
+
+
+def test_gsub_call_variable_regex_txt_changes():
+    compile_run_answer_assert(
+        "L(i)n(e).1",
+        """BEGIN {
+    x="Line.1"
+    regex="[aeiou]"
+    nc=gsub(regex,"(&)",x)
+    exit x
+}""",
+    )
+
+
+def test_gsub_call_variable_replacement_changes():
+    compile_run_answer_assert(
+        "L(i)n(e).1",
+        """BEGIN {
+    x="Line.1"
+    repl="(&)"
+    nc=gsub(/[aeiou]/,repl,x)
+    exit x
+}""",
+    )
+
+
+def test_gsub_call_variable_regex_and_replacement_txt_changes():
+    compile_run_answer_assert(
+        "L(i)n(e).1",
+        """BEGIN {
+    x="Line.1"
+    regex="[aeiou]"
+    repl="(&)"
+    nc=gsub(regex,repl,x)
+    exit x
+}""",
+    )
+
+
+def test_gsub_replace_dollar0():
+    compile_run_answer_assert(
+        "L(i)n(e).1",
+        """/Line.1/ {
+    nc=gsub(/[aeiou]/,"(&)")
+    exit $1
+}""",
+        [full_file_name("lines.txt")],
+    )
+
+
+def test_gsub_replace_dollar1():
+    compile_run_answer_assert(
+        "L(i)n(e).2",
+        """/Line.2/ {
+    nc=gsub(/[aeiou]/,"(&)",$1)
+    exit $1
+}""",
+        [full_file_name("lines.txt")],
+    )
+
+
+# compiling for sub & gsub is identical except for
+# the maximum number of replacements
+# Just testing two simple cases
+def test_sub_call_basic_nr_changes():
+    compile_run_answer_assert(
+        1,
+        """BEGIN {
+    x="Line.1"
+    nc=sub(/[aeiou]/,"(&)",x)
+    exit nc
+}""",
+    )
+
+
+def test_sub_call_basic_txt_changes():
+    compile_run_answer_assert(
+        "L(i)ne.1",
+        """BEGIN {
+    x="Line.1"
+    nc=sub(/[aeiou]/,"(&)",x)
+    exit x
+}""",
+    )
+
+
 def test_sin_function_call():
     compile_run_answer_assert(
         Fuzzy(1, 0.01),
@@ -171,7 +289,7 @@ BEGIN {
 
 def test_sprintf_compiled_d():
     compile_run_answer_assert(
-        '7',
+        "7",
         """
 BEGIN {
     a=7
@@ -183,7 +301,7 @@ BEGIN {
 
 def test_sprintf_compiled_d_left_aligned():
     compile_run_answer_assert(
-        '7  x',
+        "7  x",
         """
 BEGIN {
     a=7
@@ -195,7 +313,7 @@ BEGIN {
 
 def test_sprintf_compiled_d_pre_suffix():
     compile_run_answer_assert(
-        '>>7<<',
+        ">>7<<",
         """
 BEGIN {
     a=7
@@ -207,7 +325,7 @@ BEGIN {
 
 def test_sprintf_compiled_e():
     compile_run_answer_assert(
-        '2.340000e-01',
+        "2.340000e-01",
         """
 BEGIN {
     a=0.234
@@ -219,7 +337,7 @@ BEGIN {
 
 def test_sprintf_compiled_f():
     compile_run_answer_assert(
-        '2.340000',
+        "2.340000",
         """
 BEGIN {
     a=2.34
@@ -231,28 +349,28 @@ BEGIN {
 
 def test_sprintf_compiled_g_to_f():
     compile_run_answer_assert(
-        '2112728.4',
+        "2112728.4",
         r"""BEGIN{ exit sprintf("%g", 2112728.4);}""",
     )
 
 
 def test_sprintf_compiled_g_to_e():
     compile_run_answer_assert(
-        '2.112728e+14',
+        "2.112728e+14",
         r"""BEGIN{ exit sprintf("%g", 211272800000000.4);}""",
     )
 
 
 def test_sprintf_compiled_G_to_E():
     compile_run_answer_assert(
-        '2.112728E+14',
+        "2.112728E+14",
         r"""BEGIN{ exit sprintf("%G", 211272800000000.4);}""",
     )
 
 
 def test_sprintf_compiled_f_4dp():
     compile_run_answer_assert(
-        '2.3400',
+        "2.3400",
         """
 BEGIN {
     a=2.34
@@ -264,7 +382,7 @@ BEGIN {
 
 def test_sprintf_compiled_f_width_in_args():
     compile_run_answer_assert(
-        ' 12.3450',
+        " 12.3450",
         """
 BEGIN {
     a=12.345
@@ -276,28 +394,28 @@ BEGIN {
 
 def test_sprintf_compiled_g_to_f():
     compile_run_answer_assert(
-        '2112728.4',
+        "2112728.4",
         r"""BEGIN{ fmt="%g"; exit sprintf(fmt, 2112728.4);}""",
     )
 
 
 def test_sprintf_compiled_g_to_e():
     compile_run_answer_assert(
-        '2.112728e+14',
+        "2.112728e+14",
         r"""BEGIN{ fmt="%g"; exit sprintf(fmt, 211272800000000.4);}""",
     )
 
 
 def test_sprintf_compiled_G_to_E():
     compile_run_answer_assert(
-        '2.112728E+14',
+        "2.112728E+14",
         r"""BEGIN{ fmt="%G"; exit sprintf(fmt, 211272800000000.4);}""",
     )
 
 
-def test_sprintf_compiled_i(): # POSIX spec says synonym for d
+def test_sprintf_compiled_i():  # POSIX spec says synonym for d
     compile_run_answer_assert(
-        '7',
+        "7",
         """
 BEGIN {
     a=7
@@ -309,7 +427,7 @@ BEGIN {
 
 def test_sprintf_compiled_o():
     compile_run_answer_assert(
-        '23',
+        "23",
         """
 BEGIN {
     a=19
@@ -321,7 +439,7 @@ BEGIN {
 
 def test_sprintf_compiled_s():
     compile_run_answer_assert(
-        '7-Up',
+        "7-Up",
         """
 BEGIN {
     a="7-Up"
@@ -333,7 +451,7 @@ BEGIN {
 
 def test_sprintf_compiled_s_repls():
     compile_run_answer_assert(
-        '%{7-Up}%',
+        "%{7-Up}%",
         """
 BEGIN {
     a="7-Up"
@@ -345,7 +463,7 @@ BEGIN {
 
 def test_sprintf_compiled_s_using_count():
     compile_run_answer_assert(
-        'Two One',
+        "Two One",
         """
 BEGIN {
     a="One"
@@ -358,7 +476,7 @@ BEGIN {
 
 def test_sprintf_compiled_x():
     compile_run_answer_assert(
-        '13',
+        "13",
         """
 BEGIN {
     a=19
@@ -370,14 +488,14 @@ BEGIN {
 
 def test_sprintf_compiled_dollar():
     compile_run_answer_assert(
-        '1 1.230000 1.23',
+        "1 1.230000 1.23",
         r"""BEGIN {a=1.23;exit sprintf("%1$d %1$f %1$s",a);}""",
     )
 
 
 def test_sprintf_interpreted_d():
     compile_run_answer_assert(
-        '7',
+        "7",
         """
 BEGIN {
     a=7
@@ -390,7 +508,7 @@ BEGIN {
 
 def test_sprintf_interpreted_d_left_aligned():
     compile_run_answer_assert(
-        '7  x',
+        "7  x",
         """
 BEGIN {
     a=7
@@ -403,7 +521,7 @@ BEGIN {
 
 def test_sprintf_interpreted_d_pre_suffix():
     compile_run_answer_assert(
-        '>>7<<',
+        ">>7<<",
         """
 BEGIN {
     a=7
@@ -416,7 +534,7 @@ BEGIN {
 
 def test_sprintf_interpreted_f():
     compile_run_answer_assert(
-        '12.345000',
+        "12.345000",
         """
 BEGIN {
     a=12.345
@@ -429,7 +547,7 @@ BEGIN {
 
 def test_sprintf_interpreted_f_width_in_args():
     compile_run_answer_assert(
-        ' 12.3450',
+        " 12.3450",
         """
 BEGIN {
     a=12.345
@@ -442,7 +560,7 @@ BEGIN {
 
 def test_sprintf_interpreted_f_4dp():
     compile_run_answer_assert(
-        '12.3450',
+        "12.3450",
         """
 BEGIN {
     a=12.345
@@ -453,9 +571,9 @@ BEGIN {
     )
 
 
-def test_sprintf_interpreted_i(): # POSIX spec says synonym for d
+def test_sprintf_interpreted_i():  # POSIX spec says synonym for d
     compile_run_answer_assert(
-        '7',
+        "7",
         """
 BEGIN {
     a=7
@@ -468,7 +586,7 @@ BEGIN {
 
 def test_sprintf_interpreted_o():
     compile_run_answer_assert(
-        '23',
+        "23",
         """
 BEGIN {
     a=19
@@ -481,7 +599,7 @@ BEGIN {
 
 def test_sprintf_interpreted_s():
     compile_run_answer_assert(
-        '7-Up',
+        "7-Up",
         """
 BEGIN {
     a="7-Up"
@@ -494,7 +612,7 @@ BEGIN {
 
 def test_sprintf_interpreted_s_repls():
     compile_run_answer_assert(
-        '%{7-Up}%',
+        "%{7-Up}%",
         """
 BEGIN {
     a="7-Up"
@@ -507,7 +625,7 @@ BEGIN {
 
 def test_sprintf_interpreted_s_using_count():
     compile_run_answer_assert(
-        'Two One',
+        "Two One",
         """
 BEGIN {
     a="One"
@@ -521,7 +639,7 @@ BEGIN {
 
 def test_sprintf_interpreted_x():
     compile_run_answer_assert(
-        '13',
+        "13",
         """
 BEGIN {
     a=19
@@ -534,7 +652,7 @@ BEGIN {
 
 def test_sprintf_interpreted_dollar():
     compile_run_answer_assert(
-        '1 1.230000 1.23',
+        "1 1.230000 1.23",
         r"""BEGIN {fmt="%1$d %1$f %1$s";a=1.23;exit sprintf(fmt,a);}""",
     )
 

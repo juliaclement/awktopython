@@ -22,12 +22,12 @@ from sys import argv
 
 
 class AwkPyArgParser:
-    '''Parses commandline args.
+    """Parses commandline args.
 
-        Walks sys.args processing them & distributing
-        between args that "belong" to the compiler 
-        and those which "belong" to the runtime.
-    '''
+    Walks sys.args processing them & distributing
+    between args that "belong" to the compiler
+    and those which "belong" to the runtime.
+    """
 
     def __init__(self, compiler_options: list, runtime_options: list, variables: list):
         self.compiler_options = compiler_options
@@ -37,7 +37,6 @@ class AwkPyArgParser:
         self.code_found = False
         self.output_file_name = None
         self.program_name = "generated"
-
 
     def parse(self, args=argv):
         self.program_name = args[0]
@@ -77,8 +76,8 @@ class AwkPyArgParser:
                         i += 1
                         self.variables.append("-vFS=" + args[i])
                     else:
-                        curr_arg=curr_arg[2:]
-                        self.variables.append('-vFS=' + curr_arg)
+                        curr_arg = curr_arg[2:]
+                        self.variables.append("-vFS=" + curr_arg)
                 elif curr_arg[1] == "v":  # set variable
                     if len(curr_arg) == 2:
                         i += 1
@@ -100,43 +99,59 @@ class AwkPyArgParser:
             i += 1
 
 
-def _format_g(raw_value)->str:
-    value=float(raw_value)
-    sci_str = f'{value:e}'
-    float_str = f'{value}'
+def _format_g(raw_value) -> str:
+    value = float(raw_value)
+    sci_str = f"{value:e}"
+    float_str = f"{value}"
     return sci_str if len(sci_str) < len(float_str) else float_str
 
 
-class AwkPySprintfConversion():
-    '''List of printf/sprintf conversion commands'''
-    def __init__(self,char,static,dynamic,default_precision='',format_sfx=''):
+class AwkPySprintfConversion:
+    """List of printf/sprintf conversion commands"""
+
+    def __init__(self, char, static, dynamic, default_precision="", format_sfx=""):
         self.char = char
         self.static = static
         self.dynamic = dynamic
         self.default_precision = default_precision
         self.format_sfx = format_sfx
 
-'''All conversion specifiers in the POSIX printf families.
+
+"""All conversion specifiers in the POSIX printf families.
     n & p are tagged as omitted as they are in the POSIX C
     standard but not in the AWK one, in any case n is
-    regarded as unsafe, & p is highly unlikely to be useful '''
-AwkPySprintfConversion.all_conversions={
-    'a' : AwkPySprintfConversion('a', 'hex(float({}))[2:]',  lambda v: hex(float(v))[2:] ),
-    'A' : AwkPySprintfConversion('A', 'hex(float{}))[2:].upper()',  lambda v: hex(float(v))[2:].upper() ),
-    'c' : AwkPySprintfConversion('c', 'char({})',  lambda v: str(v)[0] ),
-    'd' : AwkPySprintfConversion('d', 'int({})',  lambda v: int(v) ),
-    'e' : AwkPySprintfConversion('e', 'float({})',  lambda v: float(v),default_precision='6', format_sfx='e' ),
-    'E' : AwkPySprintfConversion('E', 'float({})',  lambda v: float(v),default_precision='6', format_sfx='E' ),
-    'f' : AwkPySprintfConversion('f', 'float({})',  lambda v: float(v),default_precision='6', format_sfx='f' ),
-    'F' : AwkPySprintfConversion('F', 'float({})',  lambda v: float(v),default_precision='6', format_sfx='F' ),
-    'g' : AwkPySprintfConversion('g', 'self._format_g({})',  lambda v: _format_g(v) ),
-    'G' : AwkPySprintfConversion('G', 'self._format_g({}).upper()',  lambda v: _format_g(v).upper() ),
-    'i' : AwkPySprintfConversion('i', 'int({})',  lambda v: int(v) ),
+    regarded as unsafe, & p is highly unlikely to be useful """
+AwkPySprintfConversion.all_conversions = {
+    "a": AwkPySprintfConversion("a", "hex(float({}))[2:]", lambda v: hex(float(v))[2:]),
+    "A": AwkPySprintfConversion(
+        "A", "hex(float{}))[2:].upper()", lambda v: hex(float(v))[2:].upper()
+    ),
+    "c": AwkPySprintfConversion("c", "char({})", lambda v: str(v)[0]),
+    "d": AwkPySprintfConversion("d", "int({})", lambda v: int(v)),
+    "e": AwkPySprintfConversion(
+        "e", "float({})", lambda v: float(v), default_precision="6", format_sfx="e"
+    ),
+    "E": AwkPySprintfConversion(
+        "E", "float({})", lambda v: float(v), default_precision="6", format_sfx="E"
+    ),
+    "f": AwkPySprintfConversion(
+        "f", "float({})", lambda v: float(v), default_precision="6", format_sfx="f"
+    ),
+    "F": AwkPySprintfConversion(
+        "F", "float({})", lambda v: float(v), default_precision="6", format_sfx="F"
+    ),
+    "g": AwkPySprintfConversion("g", "self._format_g({})", lambda v: _format_g(v)),
+    "G": AwkPySprintfConversion(
+        "G", "self._format_g({}).upper()", lambda v: _format_g(v).upper()
+    ),
+    "i": AwkPySprintfConversion("i", "int({})", lambda v: int(v)),
     # unsafe 'n' : AwkPySprintfConversion('n', '',  lambda v: v ),
-    'o' : AwkPySprintfConversion('o', 'oct({})[2:]',  lambda v: oct(v)[2:] ),
+    "o": AwkPySprintfConversion("o", "oct({})[2:]", lambda v: oct(v)[2:]),
     # omitted 'p' : AwkPySprintfConversion('p', '',  lambda v: v ),
-    's' : AwkPySprintfConversion('s', 'str({})',  lambda v: str(v) ),
-    'u' : AwkPySprintfConversion('u', 'int({})',  lambda v: int(v) ),
-    'x' : AwkPySprintfConversion('x', 'hex(int({}))[2:]',  lambda v: hex(int(v))[2:] ),
-    'X' : AwkPySprintfConversion('X', 'hex(int({}))[2:].upper()',  lambda v: hex(int(v))[2:].upper() ),
+    "s": AwkPySprintfConversion("s", "str({})", lambda v: str(v)),
+    "u": AwkPySprintfConversion("u", "int({})", lambda v: int(v)),
+    "x": AwkPySprintfConversion("x", "hex(int({}))[2:]", lambda v: hex(int(v))[2:]),
+    "X": AwkPySprintfConversion(
+        "X", "hex(int({}))[2:].upper()", lambda v: hex(int(v))[2:].upper()
+    ),
 }

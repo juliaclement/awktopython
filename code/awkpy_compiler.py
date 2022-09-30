@@ -129,7 +129,7 @@ class SymType(IntEnum):
     SECTION = 18  # A_section
     STATEMENT = 19  # A_statement
     COMMA = 20  # Comma
-    REGEX = 20  # Regex
+    REGEX = 21  # Regex
     STATEMENT_TERMINATOR = 22  # Terminator
     END_OF_INPUT = 23  # End_Of_Input
 
@@ -175,6 +175,7 @@ class Sym:
         awk_priority: int = 10000,
         python_priority: int = 10000,
         python_equivalent=None,
+        init="AwkEmptyVarInstance",
     ):
         self.token = token
         self.sym_type = sym_type
@@ -183,7 +184,7 @@ class Sym:
         self.python_equivalent = (
             token if python_equivalent is None else python_equivalent
         )
-        self.init = "AwkEmptyVarInstance"
+        self.init = init
 
     def is_operator(self):
         return self.sym_type in [
@@ -240,6 +241,8 @@ class SymOperator(Sym):
 class SymRegex(Sym):
     """Symbol table entry for regular expressions"""
 
+    seq = 0
+
     def __init__(
         self,
         token: str,
@@ -248,8 +251,12 @@ class SymRegex(Sym):
         python_priority: int = 10000,
         python_equivalent=None,
     ):
+        init = f're.compile(r"({token[1:-1]})")'
+        SymRegex.seq += 1
+        if python_equivalent is None:
+            python_equivalent = f"self._re_{SymRegex.seq}"
         super().__init__(
-            token, sym_type, awk_priority, python_priority, python_equivalent
+            token, sym_type, awk_priority, python_priority, python_equivalent, init
         )
 
     def is_operand(self):
@@ -702,21 +709,16 @@ class AwkPyCompiler:
         if self.current_token.token[0] != "/" and not self.current_token.is_regex():
             self.advance_token()  # get rid of operator
         if self.current_token.is_regex():
-            pattern = self.current_token.token[1:-1]
+            regex = self.current_token.python_equivalent
         elif self.current_token.is_variable():
-            return (
-                pfx
-                + f"re.search({self.current_token.python_equivalent},str({variable}))"
-                + sfx
-            )
-        else:
-            if self.current_token.token != "/":
-                self.syntax_error("/")
-            self.advance_token()
-            while self.current_token.token != "/":
-                pattern += self.current_token.token
-                self.advance_token()
-        return pfx + f're.search(r"{pattern}",str({variable}))' + sfx
+            regex = f"self._dynamic_regex({self.current_token.python_equivalent})"
+        elif self.current_token.sym_type == SymType.STRING:
+            if not hasattr(self.current_token, "regex"):
+                self.current_token.regex = SymRegex(self.current_token.token)
+            regex = self.current_token.regex.python_equivalent
+        else:  # Something wrong
+            self.syntax_error("regular expression")
+        return pfx + f"{regex}.search(str({variable}))" + sfx
 
     def compile_uni_operator(self, ans: list = []) -> list:
         if self.current_token.token in ["++", "--"]:  # pre_inc / pre_dec
@@ -781,6 +783,50 @@ class AwkPyCompiler:
             return f"({func.python_equivalent}({joined_args})+{offset})"
         return f"{func.python_equivalent}({joined_args})"
 
+    def compile_sub_function_call(self, terminators=[]):
+        """Compile [g]sub(regex,target)"""
+        func = self.current_token.token
+        max_changes = 0 if func == "gsub" else 1
+        terminators.append(SymType.RIGHT_PAREN)
+        temp_num_changed = f"num_changed_{self.current_token_nr}"
+        args = self.parse_gather_function_args(terminators, True)
+        if len(args) == 2:
+            args.append("self._FLDS[0]")
+        if len(args) != 3:
+            self.syntax_error("2 or 3 arguments for {func})")
+        repl: str = args[1]
+        if repl.startswith('"') or repl.startswith('r"'):
+            repl = repl.replace(r"\&", chr(1))
+            repl = repl.replace("&", r"\1")
+            repl = repl.replace(chr(1), r"&")
+            if repl.startswith('"'):
+                repl = "r" + repl
+        else:
+            repl = f"self._dynamic_replacement({repl})"
+        regex = args[0]
+        if not regex.startswith("self._re_"):
+            regex = f"self._dynamic_regex({regex})"
+        target: str = args[2]
+        if target.startswith("self._FLDS["):
+            index = target[11:].strip("]")
+            temp_target = f"target_{self.current_token_nr}"
+            self.output_line(
+                f"{temp_target},{temp_num_changed}={regex}.subn({repl},{target},{max_changes})"
+            )
+            if index == "0":
+                self.output_line(f"self._set_dollar_fields({temp_target})")
+            else:
+                self.output_line(f"self._set_dollar_field({index},{temp_target})")
+        elif target.startswith("self."):
+            self.output_line(
+                f"{target},{temp_num_changed}={regex}.subn({repl},{target},{max_changes})"
+            )
+        else:
+            self.output_line(
+                f"_,{temp_num_changed}={regex}.subn({repl},{target},{max_changes})"
+            )
+        return temp_num_changed
+
     def compile_substr_function_call(self, terminators=[]):
         """Compile substr(str,start[,len])"""
         terminators.append(SymType.RIGHT_PAREN)
@@ -805,100 +851,109 @@ class AwkPyCompiler:
             return f"self._substr({string_name},{start},{length})"
         self.syntax_error("2 or 3 arguments")
 
-
-    def compile_sprintf_function_call(self,extra_terminators=[]):
-        orig_args:list
+    def compile_sprintf_function_call(self, extra_terminators=[]):
+        orig_args: list
         if self.current_token.sym_type == SymType.FUNCTION:
             self.advance_token()
         orig_args = self.parse_parameter_list(missing_index='""')
         if orig_args[0][0] != '"':
-            args=', '.join(orig_args)
-            return rf'self.sprintf({args})'
-        awk=orig_args.pop(0)
+            args = ", ".join(orig_args)
+            return rf"self.sprintf({args})"
+        awk = orig_args.pop(0)
         awk.strip('"')
-        output=[]
-        input_field_nr=-1
-        args=list(orig_args)
-        formatted_args=['']*len(args)
-        aliases=[{}]*len(args)
-        def permute_field( input_field_nr:int,required_type:AwkPySprintfConversion)->int:
-            required=required_type.static
-            if formatted_args[input_field_nr] == '' or \
-                formatted_args[input_field_nr] == required:
+        output = []
+        input_field_nr = -1
+        args = list(orig_args)
+        formatted_args = [""] * len(args)
+        aliases = [{}] * len(args)
+
+        def permute_field(
+            input_field_nr: int, required_type: AwkPySprintfConversion
+        ) -> int:
+            required = required_type.static
+            if (
+                formatted_args[input_field_nr] == ""
+                or formatted_args[input_field_nr] == required
+            ):
                 formatted_args[input_field_nr] = required
                 return input_field_nr
-            if alias := aliases[input_field_nr].get(required,None):
+            if alias := aliases[input_field_nr].get(required, None):
                 return alias
-            new_index=len(args)
+            new_index = len(args)
             args.append(orig_args[input_field_nr])
             formatted_args.append(required)
             aliases.append({})
-            aliases[input_field_nr][required]=new_index
+            aliases[input_field_nr][required] = new_index
             return new_index
 
-        while awk != '':
-            match=self.sprintf_format_regex.search(awk)            
+        while awk != "":
+            match = self.sprintf_format_regex.search(awk)
             if not match:
                 output.append(awk)
                 break
-            start,length=match.regs[0]
+            start, length = match.regs[0]
             if start > 0:
                 output.append(awk[:start])
-                awk=awk[start:]
+                awk = awk[start:]
                 continue
-            token=awk[0:length]
-            if repl:=self.sprintf_replacements.get(token,None):
+            token = awk[0:length]
+            if repl := self.sprintf_replacements.get(token, None):
                 output.append(repl)
             elif len(token) < 2:
                 print("Ooops got {0}".format(token))
-            else: # %...[letter]
-                match=self.sprintf_field_regex.findall(token)
-                #print(rf'{token}->{match}')
-                if match and len(match) > 0 :
-                    parameter,flags,width,precision,pftype = match[0]
+            else:  # %...[letter]
+                match = self.sprintf_field_regex.findall(token)
+                # print(rf'{token}->{match}')
+                if match and len(match) > 0:
+                    parameter, flags, width, precision, pftype = match[0]
                     # need to process width/precesion before parameter
                     # as they can consume input parameters
-                    parmtype=AwkPySprintfConversion.all_conversions[pftype]
-                    precision=parmtype.default_precision if precision=='' else precision
-                    if width != '' or precision != '':
-                        if width=='':
-                            width='0'
-                        elif width=='*':
+                    parmtype = AwkPySprintfConversion.all_conversions[pftype]
+                    precision = (
+                        parmtype.default_precision if precision == "" else precision
+                    )
+                    if width != "" or precision != "":
+                        if width == "":
+                            width = "0"
+                        elif width == "*":
                             input_field_nr += 1
-                            width_field=permute_field(input_field_nr,self.sprintf_require_int)
-                            width='{'+str(width_field)+'}'
-                        if precision != '':
-                            precision = precision.lstrip('.')
-                            if precision=='*':
+                            width_field = permute_field(
+                                input_field_nr, self.sprintf_require_int
+                            )
+                            width = "{" + str(width_field) + "}"
+                        if precision != "":
+                            precision = precision.lstrip(".")
+                            if precision == "*":
                                 input_field_nr += 1
-                                precision_field=permute_field(input_field_nr,self.sprintf_require_int)
-                                precision='{'+str(precision_field)+'}'
+                                precision_field = permute_field(
+                                    input_field_nr, self.sprintf_require_int
+                                )
+                                precision = "{" + str(precision_field) + "}"
                             width += "." + precision
-                    if parameter=='':
+                    if parameter == "":
                         input_field_nr += 1
-                        param_nr=input_field_nr
+                        param_nr = input_field_nr
                     else:
-                        param_nr=int(parameter[0:-1])-1
-                    param_nr=permute_field(param_nr,parmtype)
-                    parameter=str(param_nr)
+                        param_nr = int(parameter[0:-1]) - 1
+                    param_nr = permute_field(param_nr, parmtype)
+                    parameter = str(param_nr)
                     if len(width) > 0:
-                        if '-' in flags: # left align numbers
-                            parameter+=':<' + width
+                        if "-" in flags:  # left align numbers
+                            parameter += ":<" + width
                         else:
-                            parameter+=':>' + width
-                    token = '{' + parameter + parmtype.format_sfx + '}'
+                            parameter += ":>" + width
+                    token = "{" + parameter + parmtype.format_sfx + "}"
                 else:
                     print("Internal error, can't refind {token}")
                 output.append(token)
-            awk=awk[length:]
+            awk = awk[length:]
         for i in range(len(args)):
-            if formatted_args[i] != '':
-                args[i]=formatted_args[i].format(args[i])
-        ans = ''.join(output)
+            if formatted_args[i] != "":
+                args[i] = formatted_args[i].format(args[i])
+        ans = "".join(output)
         if len(args) > 0:
-            ans += '.format(' + ', '.join(args) + ')'
+            ans += ".format(" + ", ".join(args) + ")"
         return ans
-
 
     def compile_split_function_call(self, terminators=[]):
         """Compile split( str, array[, fieldsep])"""
@@ -924,9 +979,11 @@ class AwkPyCompiler:
                 return expr
         self.syntax_error("2 or 3 arguments")
 
-    def parse_parameter_list(self, extra_terminators=[], comma=SymType.COMMA, missing_index=None):
-        '''return a comma seperated list of expressions as a list translated
-           into Python & ready to insert into code'''
+    def parse_parameter_list(
+        self, extra_terminators=[], comma=SymType.COMMA, missing_index=None
+    ):
+        """return a comma seperated list of expressions as a list translated
+        into Python & ready to insert into code"""
         terminators = [
             SymType.RIGHT_PAREN,
             SymType.LEFT_BRACE,
@@ -935,11 +992,11 @@ class AwkPyCompiler:
             SymType.STATEMENT_TERMINATOR,
         ]
         terminators.extend(extra_terminators)
-        answer=[]
+        answer = []
         if self.current_token.sym_type == SymType.LEFT_PAREN:
             self.advance_token()
         while self.current_token.sym_type not in terminators:
-            answer.append(self.compile_expression([comma],missing_index=missing_index))
+            answer.append(self.compile_expression([comma], missing_index=missing_index))
             if self.current_token.sym_type == comma:
                 self.advance_token()
         return answer
@@ -975,7 +1032,11 @@ class AwkPyCompiler:
                     if self.current_token.sym_type == SymType.RIGHT_PAREN:
                         ans.append("()")  # empty argument list
                     else:
-                        ans.append("(" + self.compile_expression(missing_index=missing_index) + ")")
+                        ans.append(
+                            "("
+                            + self.compile_expression(missing_index=missing_index)
+                            + ")"
+                        )
                     self.advance_token()
                 elif self.current_token.sym_type == SymType.LEFT_BRACKET:
                     # We need to save some current state in case we encounter ++ or --
@@ -992,7 +1053,7 @@ class AwkPyCompiler:
                     if missing_index is None:
                         ans.append(f"[{last_array_index}]")
                     else:
-                        ans.append(f'.get( {last_array_index}, {missing_index})')
+                        ans.append(f".get( {last_array_index}, {missing_index})")
                 elif self.current_token.token in ["++", "--"]:  # post_inc / post_dec
                     op = self.current_token.token
                     if self.prior_token.sym_type == SymType.VARIABLE:
@@ -1044,7 +1105,7 @@ class AwkPyCompiler:
                     self.compile_uni_operator(ans)
                 elif self.current_token.is_function():
                     ans.append(self.current_token.parser())
-                    if self.current_token.token == ')':
+                    if self.current_token.token == ")":
                         self.advance_token()
                 elif self.current_token.is_operand():
                     ans.append(self.current_token.python_equivalent)
@@ -1185,11 +1246,11 @@ class AwkPyCompiler:
 
     def compile_delete_command(self):
         self.advance_token_require(sym_types=[SymType.VARIABLE])  # discard "delete"
-        var=self.current_token
+        var = self.current_token
         self.advance_token()
         if self.current_token.sym_type == SymType.LEFT_BRACKET:
             self.advance_token()
-            index=self.compile_expression([SymType.RIGHT_BRACKET])
+            index = self.compile_expression([SymType.RIGHT_BRACKET])
             self.output_line(f"del {var.python_equivalent}[{index}]")
             if self.current_token.sym_type == SymType.RIGHT_BRACKET:
                 self.advance_token()
@@ -1302,12 +1363,12 @@ class AwkPyCompiler:
     def compile_print_statement(self):
         self.advance_token()  # discard "print"
         ans = "print("
-        fields=self.parse_parameter_list(missing_index='""')
+        fields = self.parse_parameter_list(missing_index='""')
         self.consume_terminator()
-        if len(fields)==0: # print; == print $0;
+        if len(fields) == 0:  # print; == print $0;
             ans += "self._FLDS[0]"
         else:
-            ans += ','.join(fields)+',sep=self.OFS,end=self.ORS'
+            ans += ",".join(fields) + ",sep=self.OFS,end=self.ORS"
         ans += ")"
         self.output_line(ans)
 
@@ -1568,6 +1629,11 @@ class AwkPyCompiler:
                     )
                 if not sym.is_built_in():
                     self.output_line(f"{sym.python_equivalent}={sym.init}")
+            elif sym.is_regex():
+                self.output_line(f"{sym.python_equivalent}={sym.init}")
+            elif hasattr(sym, "regex"):
+                regex = sym.regex
+                self.output_line(f"{regex.python_equivalent}={regex.init}")
 
         if self.do_debug:
             print([t.token for l, t in self.tokens])
@@ -1744,6 +1810,7 @@ class AwkPyCompiler:
             SymFunction("atan2", python_equivalent="math.atan2"),
             SymFunction("cos", python_equivalent="math.cos"),
             SymFunction("exp", python_equivalent="math.exp"),
+            SymFunction("gsub", lambda t=[]: self.compile_sub_function_call(t)),
             SymFunction("int", python_equivalent="int"),
             SymFunction("length", python_equivalent="len"),
             SymFunction("log", python_equivalent="math.log"),
@@ -1753,6 +1820,7 @@ class AwkPyCompiler:
             SymFunction("split", lambda t=[]: self.compile_split_function_call(t)),
             SymFunction("sprintf", lambda t=[]: self.compile_sprintf_function_call(t)),
             SymFunction("sqrt", python_equivalent="math.sqrt"),
+            SymFunction("sub", lambda t=[]: self.compile_sub_function_call(t)),
             SymFunction("substr", lambda: self.compile_substr_function_call()),
             SymFunction("tolower", default_function_method_parser, "lower"),
             SymFunction("toupper", default_function_method_parser, "upper"),
@@ -1760,10 +1828,8 @@ class AwkPyCompiler:
             #   Unimplemented functions
             #
             Sym("close", SymType.RESERVED_WORD),
-            Sym("gsub", SymType.RESERVED_WORD),
             Sym("index", SymType.RESERVED_WORD),
             Sym("match", SymType.RESERVED_WORD),
-            Sym("sub", SymType.RESERVED_WORD),
             Sym("system", SymType.RESERVED_WORD),
             #
             #   Statements
@@ -1819,11 +1885,13 @@ class AwkPyCompiler:
         self.function_section = 6  # ("END")+1
         self.current_token_nr = -1
         # used by compile_sprintf_function_call (sprintf)
-        self.sprintf_require_int = AwkPySprintfConversion.all_conversions['d']
-        fieldspec = r"([0-9]*\$)?([-+ 0'#])?([1-9*][0-9]*)?([.][0-9*]+)?([aAcdeEfFgGiosuxX])"
+        self.sprintf_require_int = AwkPySprintfConversion.all_conversions["d"]
+        fieldspec = (
+            r"([0-9]*\$)?([-+ 0'#])?([1-9*][0-9]*)?([.][0-9*]+)?([aAcdeEfFgGiosuxX])"
+        )
         self.sprintf_field_regex = re.compile(fieldspec)
-        self.sprintf_format_regex = re.compile(r"([\\%]%)|([{}])|(%"+fieldspec+")")
-        self.sprintf_replacements = {r'\%':'%','%%':'%','{':'{{','}':'}}'}
+        self.sprintf_format_regex = re.compile(r"([\\%]%)|([{}])|(%" + fieldspec + ")")
+        self.sprintf_replacements = {r"\%": "%", "%%": "%", "{": "{{", "}": "}}"}
 
 
 if __name__ == "__main__":
@@ -1880,17 +1948,14 @@ if __name__ == "__main__":
     y=sprintf("%e",a)
     exit y
 }"""
+    source = r"""{
+    x=$0
+    nc=gsub(/[aeiou]/,"\&&\&",x)
+    print $0,"->",x," ",nc,"changes"
+}"""
     source = r"""BEGIN {
-    a[1] = 1.234
-    a[2] = 2.345
-    a[3] = 3.456
-    delete a
-    a[4] = 4.567
-    a[5] = 5.678
-    for( i in a ) {
-        printf("%d%s",i,OFS)
-    }
-    print ""
+    if( "start"~"a" ) exit 1
+    exit 0
 }"""
     a = AwkPyCompiler()
     code = a.compile(source)

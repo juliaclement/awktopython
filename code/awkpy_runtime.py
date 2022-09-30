@@ -16,13 +16,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from functools import lru_cache  # would rather use @cache, but not available until 3.9
 from collections import defaultdict
 import sys
 import re
 import subprocess
 import os
 from pathlib import Path
-from awkpy_common import AwkPyArgParser,AwkPySprintfConversion
+from awkpy_common import AwkPyArgParser, AwkPySprintfConversion
 
 exit_code = 0
 
@@ -356,6 +357,23 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         yield from sys.stdin
         self.ENDFILE()
 
+    @lru_cache
+    def _dynamic_regex(self, regex: str):
+        if regex[0] != "(":
+            regex = f"({regex})"
+        return re.compile(regex)
+
+    def _dynamic_replacement(self, repl: str):
+        """Replacement strings in AWK use '&' where Python uses '\1'."""
+        # POSIX specifies one \, gawk uses 2 ???
+        # I guess this will eventually be reported as a bug
+        # meanwhile I'll just brute force it
+        repl = repl.replace(r"\\&", chr(1))
+        repl = repl.replace(r"\&", chr(1))
+        repl = repl.replace("&", r"\1")
+        repl = repl.replace(chr(1), r"&")
+        return repl
+
     def _var_on_commandline(self, opt, arg):
         """implements command line [-v] var=val"""
         optn = opt.split("=", 1)
@@ -413,11 +431,36 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                                     break
                         self.ENDFILE()
 
-    def _format_g(self,raw_value)->str:
-        value=float(raw_value)
-        sci_str = f'{value:e}'
-        float_str = f'{value}'
+    def _format_g(self, raw_value) -> str:
+        value = float(raw_value)
+        sci_str = f"{value:e}"
+        float_str = f"{value}"
         return sci_str if len(sci_str) < len(float_str) else float_str
+
+    def _set_dollar_fields(self, line):
+        """Set $0 to line, recalculate NF, $1..$NF"""
+        if self.FS in [" ", ""]:
+            line = line.strip(" \t\n\r")
+            FLDS = line.split()
+        else:
+            line = line.strip("\n\r")
+            FLDS = line.split(self.FS)
+        self.NF = len(FLDS)
+        FLDS.insert(0, line)
+        self._FLDS = self._to_array(FLDS, 0)
+
+    def _set_dollar_field(self, nr, value):
+        """Set $nr to value, recalculate $0.
+        As value may contain FS, we then
+        recalculate the whole $array & NF"""
+        if nr == 0:
+            self._set_dollar_fields(value)
+        else:
+            self._FLDS[nr] = value
+            sep = " " if self.FS == "" else self.FS
+            flds = [v for k, v in self._FLDS.items()]
+            line = sep.join(flds[1:])
+            self._set_dollar_fields(line)
 
     def _run(self, argv):
         options = []
@@ -441,15 +484,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                     # Possible solution https://stackoverflow.com/questions/3164785/stop-generator-from-within-block-in-python
                     if self._nextfile:
                         continue
-                    if self.FS in [" ", ""]:
-                        line = line.strip(" \t\n\r")
-                        FLDS = line.split()
-                    else:
-                        line = line.strip("\n\r")
-                        FLDS = line.split(self.FS)
-                    self.NF = len(FLDS)
-                    FLDS.insert(0, line)
-                    self._FLDS = self._to_array(FLDS, 0)
+                    self._set_dollar_fields(line)
                     self.NR += 1
                     self.FNR += 1
                     try:
@@ -467,66 +502,67 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         set_exit_code(AwkpyRuntimeWrapper._ans)
         return AwkpyRuntimeWrapper._ans
 
+    def sprintf(self, awk: str, *args: list):
+        output = []
+        input_field_nr = -1
 
-    def sprintf(self, awk:str, *args:list):
-        output=[]
-        input_field_nr=-1
-
-        while awk != '':
-            match=self.sprintf_format_regex.search(awk)            
+        while awk != "":
+            match = self.sprintf_format_regex.search(awk)
             if not match:
                 output.append(awk)
                 break
-            start,length=match.regs[0]
+            start, length = match.regs[0]
             if start > 0:
                 output.append(awk[:start])
-                awk=awk[start:]
+                awk = awk[start:]
                 continue
-            token=awk[0:length]
-            if repl:=self.sprintf_replacements.get(token,None):
+            token = awk[0:length]
+            if repl := self.sprintf_replacements.get(token, None):
                 output.append(repl)
             elif len(token) < 2:
                 print("Ooops got {0}".format(token))
-            else: # %...[letter]
-                match=self.sprintf_field_regex.findall(token)
-                if match and len(match) > 0 :
-                    parameter,flags,width,precision,pftype = match[0]
-                    parmtype=AwkPySprintfConversion.all_conversions[pftype]
+            else:  # %...[letter]
+                match = self.sprintf_field_regex.findall(token)
+                if match and len(match) > 0:
+                    parameter, flags, width, precision, pftype = match[0]
+                    parmtype = AwkPySprintfConversion.all_conversions[pftype]
                     # need to process width/precesion before parameter
                     # as they can consume input parameters
-                    precision=parmtype.default_precision if precision=='' else precision
-                    if width != '' or precision != '':
-                        if width=='':
-                            width='0'
-                        elif width=='*':
+                    precision = (
+                        parmtype.default_precision if precision == "" else precision
+                    )
+                    if width != "" or precision != "":
+                        if width == "":
+                            width = "0"
+                        elif width == "*":
                             input_field_nr += 1
-                            width=str(int(args[input_field_nr]))
-                        if precision != '':
-                            precision = precision.lstrip('.')
-                            if precision=='*':
+                            width = str(int(args[input_field_nr]))
+                        if precision != "":
+                            precision = precision.lstrip(".")
+                            if precision == "*":
                                 input_field_nr += 1
-                                precision=str(int(args[input_field_nr]))
+                                precision = str(int(args[input_field_nr]))
                             width += "." + precision
-                    if parameter=='':
+                    if parameter == "":
                         input_field_nr += 1
-                        param_nr=input_field_nr
+                        param_nr = input_field_nr
                     else:
-                        param_nr=int(parameter[0:-1])-1
-                    paramvalue=parmtype.dynamic(args[param_nr])
+                        param_nr = int(parameter[0:-1]) - 1
+                    paramvalue = parmtype.dynamic(args[param_nr])
                     if len(width) > 0:
-                        if '-' in flags: # left align numbers
-                            width=':<' + width
+                        if "-" in flags:  # left align numbers
+                            width = ":<" + width
                         else:
-                            width=':>' + width
-                        formatter='{0'+width+parmtype.format_sfx+'}'
-                        token=formatter.format(paramvalue)
+                            width = ":>" + width
+                        formatter = "{0" + width + parmtype.format_sfx + "}"
+                        token = formatter.format(paramvalue)
                     else:
                         token = str(paramvalue)
                 else:
                     print("Internal error, can't refind {token}")
                 output.append(token)
-            awk=awk[length:]
-        return ''.join(output)
+            awk = awk[length:]
+        return "".join(output)
 
     def __init__(self):
         super().__init__()
@@ -539,19 +575,21 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         self.NR = 0
         self.OFS = " "
         self.ORS = "\n"
-        self.CONVFMT = '%.6g'
-        self.OFMT = '%.6g'
+        self.CONVFMT = "%.6g"
+        self.OFMT = "%.6g"
         self._nextfile = False
         self.ENVIRON = defaultdict(AwkEmptyVar.instance, os.environ)
         # if no statements are present in the main loop,
         # input files are not processed
         self._has_mainloop = False
         # used by sprintf
-        self.sprintf_require_int = AwkPySprintfConversion.all_conversions['d']
-        fieldspec = r"([0-9]*\$)?([-+ 0'#])?([1-9*][0-9]*)?([.][0-9*]+)?([aAcdeEfFgGiosuxX])"
+        self.sprintf_require_int = AwkPySprintfConversion.all_conversions["d"]
+        fieldspec = (
+            r"([0-9]*\$)?([-+ 0'#])?([1-9*][0-9]*)?([.][0-9*]+)?([aAcdeEfFgGiosuxX])"
+        )
         self.sprintf_field_regex = re.compile(fieldspec)
-        self.sprintf_format_regex = re.compile(r"([\\%]%)|([{}])|(%"+fieldspec+")")
-        self.sprintf_replacements = {r'\%':'%','%%':'%','{':'{','}':'}'}
+        self.sprintf_format_regex = re.compile(r"([\\%]%)|([{}])|(%" + fieldspec + ")")
+        self.sprintf_replacements = {r"\%": "%", "%%": "%", "{": "{", "}": "}"}
 
 
 def set_exit_code(code):
