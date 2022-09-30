@@ -251,6 +251,20 @@ def test_gsub_replace_dollar1():
     )
 
 
+def test_index_found():
+    compile_run_answer_assert(
+        2,
+        """BEGIN { exit index("bad","a");}""",
+    )
+
+
+def test_index_not_found():
+    compile_run_answer_assert(
+        0,
+        """BEGIN { exit index("good","a");}""",
+    )
+
+
 def test_log_function_call():
     compile_run_answer_assert(
         Fuzzy(1, 0.001),
@@ -258,6 +272,20 @@ def test_log_function_call():
     y=log(2.718281828459045)
     exit y
 }""",
+    )
+
+
+def test_match_found():
+    compile_run_answer_assert(
+        2,
+        """BEGIN { exit match("xbad",r"[abcd]");}""",
+    )
+
+
+def test_match_not_found():
+    compile_run_answer_assert(
+        0,
+        """BEGIN { exit match("good",r"[abc]");}""",
     )
 
 

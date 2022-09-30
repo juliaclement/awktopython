@@ -782,6 +782,28 @@ class AwkPyCompiler:
             return f"({func.python_equivalent}({joined_args})+{offset})"
         return f"{func.python_equivalent}({joined_args})"
 
+    def compile_index_function(self, terminators=[]):
+        """Compile fn(haystack, needle)"""
+        func: SymFunction = self.current_token
+        terminators.append(SymType.RIGHT_PAREN)
+        args = self.parse_gather_function_args(terminators, True)
+        if len(args) != 2:
+            self.syntax_error("2 arguments required for {func})")
+        haystack = args[0]
+        needle = args[1]
+        return f"({haystack}.find({needle})+1)"
+
+    def compile_match_function(self, terminators=[]):
+        """Compile fn(haystack, needle)"""
+        func: SymFunction = self.current_token
+        terminators.append(SymType.RIGHT_PAREN)
+        args = self.parse_gather_function_args(terminators, True)
+        if len(args) != 2:
+            self.syntax_error("2 arguments required for {func})")
+        haystack = args[0]
+        needle = args[1]
+        return f"self._match({haystack},{needle})"
+
     def compile_sub_function_call(self, terminators=[]):
         """Compile [g]sub(regex,target)"""
         func = self.current_token.token
@@ -1810,9 +1832,11 @@ class AwkPyCompiler:
             SymFunction("cos", python_equivalent="math.cos"),
             SymFunction("exp", python_equivalent="math.exp"),
             SymFunction("gsub", lambda t=[]: self.compile_sub_function_call(t)),
+            SymFunction("index", lambda t=[]: self.compile_index_function(t)),
             SymFunction("int", python_equivalent="int"),
             SymFunction("length", python_equivalent="len"),
             SymFunction("log", python_equivalent="math.log"),
+            SymFunction("match", lambda t=[]: self.compile_match_function(t)),
             SymFunction("rand", python_equivalent="random.random"),
             SymFunction("srand", python_equivalent="random.seed"),
             SymFunction("sin", python_equivalent="math.sin"),
@@ -1827,8 +1851,6 @@ class AwkPyCompiler:
             #   Unimplemented functions
             #
             Sym("close", SymType.RESERVED_WORD),
-            Sym("index", SymType.RESERVED_WORD),
-            Sym("match", SymType.RESERVED_WORD),
             Sym("system", SymType.RESERVED_WORD),
             #
             #   Statements

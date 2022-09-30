@@ -114,9 +114,9 @@ var=value variable-assignment arguments (since early awk) implemented.
 
 #### POSIX
 
-Implemented: atan2, cos, exp, gsub, int, length, log, rand, sprintf, srand, sin, split, sub, substr, sqrt, tolower, toupper
+Implemented: atan2, cos, exp, gsub, index, int, length, log, match, rand, sprintf, srand, sin, split, sub, substr, sqrt, tolower, toupper
 
-Not Implemented: close, index, match, system. All high priority.
+Not Implemented: close, system. Both high priority.
 
 #### GAWK extensions
 

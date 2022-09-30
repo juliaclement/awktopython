@@ -363,6 +363,14 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             regex = f"({regex})"
         return re.compile(regex)
 
+    def _match(self, haystack, regex_str):
+        regex = self._dynamic_regex(regex_str)
+        match = regex.search(haystack)
+        if match:
+            start, length = match.regs[0]
+            return start + 1
+        return 0
+
     def _dynamic_replacement(self, repl: str):
         """Replacement strings in AWK use '&' where Python uses '\1'."""
         # POSIX specifies one \, gawk uses 2 ???
