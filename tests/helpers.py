@@ -64,8 +64,17 @@ class Fuzzy:
 
 # unless specified otherwise, test input files are in the same directory as
 # the tests
-def full_file_name(test_file):
+def full_file_name(test_file) -> str:
     return str(Path(__file__).parent / test_file)
+
+
+# unless specified otherwise, test output files are in the a
+# sub directory of pytest temp directory
+def temp_file_name(tmp_path: Path, test_file: str) -> Path:
+    dir = tmp_path / "output"
+    if not dir.exists():
+        dir.mkdir()
+    return dir / test_file
 
 
 empty_txt = full_file_name("empty.txt")
@@ -94,6 +103,12 @@ def compile_run_capsys_assert(
     compile_run(awk, files)
     captured = capsys.readouterr()
     assert_equal(captured.out, expected)
+
+
+def compile_run_capsys_return(capsys, awk: str, files: list = [empty_txt]) -> str:
+    compile_run(awk, files)
+    captured = capsys.readouterr()
+    return captured.out
 
 
 def compile_run_answer_assert(expected, awk: str, files: list = [empty_txt]):

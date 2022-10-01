@@ -67,12 +67,8 @@ def test_conditions_start_well():
     compile_catch("""] {xxxxx=xxxxx *3}""")
 
 
-def test_statements_at_file_level_are_blocks():
-    compile_catch("""xxxxx=xxxxxx*3;""")
-
-
 def test_statements_at_file_level_are_blocks_2():
-    compile_catch("""(xxxxx=xxxxxx*3);""")
+    compile_catch("""while (xxxxx=xxxxxx*3);""")
 
 
 def test_pattern_is_string_or_regex():

@@ -280,11 +280,12 @@ class SymVariable(Sym):
         built_in=False,
         array=False,
         scalar=False,
+        init="AwkEmptyVarInstance",
     ):
         if python_equivalent is None:
             python_equivalent = "self." + token.replace("::", "__")
         super().__init__(
-            token, sym_type, awk_priority, python_priority, python_equivalent
+            token, sym_type, awk_priority, python_priority, python_equivalent, init=init
         )
         self.built_in = built_in
         self.is_array = array
@@ -1440,7 +1441,7 @@ class AwkPyCompiler:
     def compile_print_common(self):
         redirects = [">", ">>", "|"]
         if self.current_token.token in redirects:
-            file_mode = {">": "w", ">>": "a", "|": "|"}[self.current_token.token]
+            file_mode = {">": "w", ">>": "a", "|": ">|"}[self.current_token.token]
             self.advance_token()
             file_name = self.current_token.token
             self.advance_token()
@@ -1557,15 +1558,21 @@ class AwkPyCompiler:
             ]:
                 prog = self.compile_condition("{")
             elif self.current_token.token == "/" or self.current_token.is_regex():
-                self.output_line("if " + self.compile_regex("self._FLDS[0]", "~") + ":")
+                prog = self.compile_regex("self._FLDS[0]", "~")
                 if self.current_token.is_regex() or self.current_token.token == "/":
                     self.advance_token()
-                self.compile_indented_statement()
             else:
                 self.syntax_error("a condition")
         if prog:
             self.output_line("if " + prog + ":")
-            self.compile_indented_statement()
+            if self.current_token.is_terminator():
+                self.consume_terminator()
+            if self.current_token.sym_type == SymType.LEFT_BRACE:
+                self.compile_indented_statement()
+            else:
+                self.output_line(
+                    r"    print(self._FLDS[0], sep=self.OFS, end=self.ORS)"
+                )
 
     def compile_to_segments(self, source):
         if len(source) > 2 and source[0:2] == "-f":
@@ -1895,6 +1902,13 @@ class AwkPyCompiler:
             SymVariable("OFS", built_in=True, scalar=True),
             SymVariable("ORS", built_in=True, scalar=True),
             SymVariable("ENVIRON", built_in=True, array=True),
+            SymVariable(
+                "awkpy::wait_for_pipe_close",
+                built_in=True,
+                scalar=True,
+                python_equivalent="self.awkpy__wait_for_pipe_close",
+                init="0",
+            ),
             # To implement ARGIND, CONVFMT, ERRNO, FUNCTAB, OFMT, RLENGTH, RS, RSTART, SUBSEP,SYMTAB
             # functions = ??
             # __init__ = ??
@@ -1910,6 +1924,7 @@ class AwkPyCompiler:
             #   functions
             #
             SymFunction("atan2", python_equivalent="math.atan2"),
+            SymFunction("close", python_equivalent="self._close_file"),
             SymFunction("cos", python_equivalent="math.cos"),
             SymFunction("exp", python_equivalent="math.exp"),
             SymFunction("gsub", lambda t=[]: self.compile_sub_function_call(t)),
@@ -1931,7 +1946,6 @@ class AwkPyCompiler:
             #
             #   Unimplemented functions
             #
-            Sym("close", SymType.RESERVED_WORD),
             Sym("system", SymType.RESERVED_WORD),
             #
             #   Statements
@@ -2055,6 +2069,8 @@ if __name__ == "__main__":
     nc=gsub(/[aeiou]/,"\&&\&",x)
     print $0,"->",x," ",nc,"changes"
 }"""
+    source = r"""BEGIN {ORS=""} /b/{getline $2; print $0;}"""
+    source = r"""/Line.2/"""
     source = r"""BEGIN {
     var="start"
     arr[0]="zero"
@@ -2062,7 +2078,18 @@ if __name__ == "__main__":
     print "var="var,"arr=" arr[0],arr[1] >>"test.output"
     exit 0
 }"""
-    source = r"""BEGIN {ORS=""} /b/{getline $2; print $0;}"""
+    tempfile_path = "test_print_to_file.txt"
+    tempfile_name = str(tempfile_path)
+    command = rf'''"/bin/dd of={tempfile_name} bs=1"'''
+
+    source = (
+        r"""BEGIN {awkpy::wait_for_pipe_close=1;} $1=="Line.1" {printf "%s", $1 | """
+        + command
+        + """;close("""
+        + command
+        + """);}"""
+    )
+    source = r"""BEGIN {awkpy::wait_for_pipe_close=1;} $1=="Line.1" {printf "%s\\n", $1 | "/bin/dd of=/home/julia/Projects/python/awktopython/tests/output/test_print_to_file.txt";close("/bin/dd of=/home/julia/Projects/python/awktopython/tests/test_print_to_file.txt");}"""
     a = AwkPyCompiler()
     code = a.compile(source)
     print(code)

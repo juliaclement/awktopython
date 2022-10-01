@@ -18,7 +18,7 @@
 # limitations under the License.
 from ast import Delete
 from functools import lru_cache  # would rather use @cache, but not available until 3.9
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, TimeoutExpired
 from collections import defaultdict
 from io import TextIOWrapper
 import sys
@@ -409,19 +409,19 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             return self.file_handle
 
     class PipeIOWrapper(FileWrapper):
-        def __init__(self, runtime, name: str, mode: str, reader=None, writer=None):
+        def __init__(self, runtime, name: str, mode: str, stdin=None, stdout=None):
             super().__init__(runtime, name, mode)
-            self.has_reader = reader
-            self.has_writer = writer
+            self.has_stdin = stdin
+            self.has_stdout = stdout
             self.popen = None
 
         def open(self):
             opts = {}
-            if self.has_reader:
-                opts["stdout"] = PIPE
-            if self.has_writer:
-                opts["stdin"] = PIPE
-            self.popen = subprocess.Popen(["/usr/bin/sort"], encoding="utf-8", **opts)
+            if self.has_stdout:
+                opts["stdout"] = subprocess.PIPE
+            if self.has_stdin:
+                opts["stdin"] = subprocess.PIPE
+            self.popen = subprocess.Popen(self.name.split(), encoding="utf-8", **opts)
 
         def reader(self):
             return self.popen.stdout
@@ -431,9 +431,15 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
 
         def close(self):
             if self.popen.stdin:
-                self.popen.stdin.close
+                self.popen.stdin.close()
+            if self.runtime.awkpy__wait_for_pipe_close != 0:
+                try:
+                    self.popen.wait(2.0)
+                except TimeoutExpired:
+                    self.popen.kill()
+                    self.popen.wait(3.0)
             if self.popen.stdout:
-                self.popen.stdout.close
+                self.popen.stdout.close()
             del self.popen
 
     def _access_file(self, name: str, mode: str, stdout=None, stdin=None):
@@ -442,7 +448,14 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             return self._open_files[name]
         except:
             pass
-        if mode == "|":
+        if "|" in mode:  # [">|", "|<", '&|'):
+            if ">" in mode:
+                stdin = True
+            if "<" in mode:
+                stdout = True
+            if "&" in mode:
+                stdin = True
+                stdout = True
             the_wrapper = self.PipeIOWrapper(self, name, mode, stdin, stdout)
         elif mode in ["w", "a"]:
             the_wrapper = self.FileOutputWrapper(self, name, mode)
@@ -451,9 +464,12 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         return the_wrapper
 
     def _close_file(self, name):
-        the_file: self.FileWrapper = self._open_files[name]
-        the_file.close()
-        del self._open_files[name]
+        try:
+            the_file = self._open_files[name]
+            the_file.close()
+            del self._open_files[name]
+        except KeyError:  # already closed?
+            pass
 
     def _var_on_commandline(self, opt, arg):
         """implements command line [-v] var=val"""
@@ -681,6 +697,10 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         self.CONVFMT = "%.6g"
         self.OFMT = "%.6g"
         self.ENVIRON = defaultdict(AwkEmptyVar.instance, os.environ)
+        #
+        # awkpy namespace
+        #
+        self.awkpy__wait_for_pipe_close = 0  # (False)
         # files open for input or output
         self._open_files = {}
         # if no statements are present in the main loop,
