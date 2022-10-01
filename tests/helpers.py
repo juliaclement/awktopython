@@ -70,6 +70,11 @@ def full_file_name(test_file):
 
 empty_txt = full_file_name("empty.txt")
 
+
+def assert_equal(expected_txt, found_txt):
+    assert expected_txt == found_txt
+
+
 # we expect to find the file empty.txt in the same directory
 
 
@@ -88,7 +93,7 @@ def compile_run_capsys_assert(
 ):
     compile_run(awk, files)
     captured = capsys.readouterr()
-    assert captured.out == expected
+    assert_equal(captured.out, expected)
 
 
 def compile_run_answer_assert(expected, awk: str, files: list = [empty_txt]):
@@ -109,7 +114,7 @@ def check_arg_parser(value, check, args: list):
     args.insert(0, "program")
     parser.parse(args)
     field = check(parser, compiler_options, runtime_options, variables)
-    assert field == value
+    assert_equal(field, value)
 
 
 if __name__ == "__main__":

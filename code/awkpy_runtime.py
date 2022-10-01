@@ -16,8 +16,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from ast import Delete
 from functools import lru_cache  # would rather use @cache, but not available until 3.9
+from subprocess import Popen, PIPE
 from collections import defaultdict
+from io import TextIOWrapper
 import sys
 import re
 import subprocess
@@ -347,16 +350,6 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         """
         pass
 
-    def _get_stdin(self):
-        self.FNR = 0
-        self.FILENAME = "-"
-        self._FLDS = []
-        self.NF = 0
-        self._nextfile = False
-        self.BEGINFILE()
-        yield from sys.stdin
-        self.ENDFILE()
-
     @lru_cache
     def _dynamic_regex(self, regex: str):
         if regex[0] != "(":
@@ -381,6 +374,86 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         repl = repl.replace("&", r"\1")
         repl = repl.replace(chr(1), r"&")
         return repl
+
+    class FileWrapper:
+        def __init__(self, runtime, name: str, mode: str):
+            self.runtime = runtime
+            self.name = name
+            self.mode = mode
+
+        def open(self):
+            pass
+
+        def close(self):
+            pass
+
+        def reader(self):
+            return None
+
+        def writer(self):
+            return None
+
+    class FileOutputWrapper(FileWrapper):
+        def __init__(self, runtime, name: str, mode: str):
+            super().__init__(runtime, name, mode)
+            self.file_handle = None
+
+        def open(self):
+            self.file_handle = open(self.name, self.mode, encoding="utf-8")
+
+        def close(self):
+            self.file_handle.close()
+            del self.file_handle
+
+        def writer(self):
+            return self.file_handle
+
+    class PipeIOWrapper(FileWrapper):
+        def __init__(self, runtime, name: str, mode: str, reader=None, writer=None):
+            super().__init__(runtime, name, mode)
+            self.has_reader = reader
+            self.has_writer = writer
+            self.popen = None
+
+        def open(self):
+            opts = {}
+            if self.has_reader:
+                opts["stdout"] = PIPE
+            if self.has_writer:
+                opts["stdin"] = PIPE
+            self.popen = subprocess.Popen(["/usr/bin/sort"], encoding="utf-8", **opts)
+
+        def reader(self):
+            return self.popen.stdout
+
+        def writer(self):
+            return self.popen.stdin
+
+        def close(self):
+            if self.popen.stdin:
+                self.popen.stdin.close
+            if self.popen.stdout:
+                self.popen.stdout.close
+            del self.popen
+
+    def _access_file(self, name: str, mode: str, stdout=None, stdin=None):
+        """Open a file for read or write."""
+        try:
+            return self._open_files[name]
+        except:
+            pass
+        if mode == "|":
+            the_wrapper = self.PipeIOWrapper(self, name, mode, stdin, stdout)
+        elif mode in ["w", "a"]:
+            the_wrapper = self.FileOutputWrapper(self, name, mode)
+        the_wrapper.open()
+        self._open_files[name] = the_wrapper
+        return the_wrapper
+
+    def _close_file(self, name):
+        the_file: self.FileWrapper = self._open_files[name]
+        the_file.close()
+        del self._open_files[name]
 
     def _var_on_commandline(self, opt, arg):
         """implements command line [-v] var=val"""
@@ -415,28 +488,52 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         """
         Generator to return input lines while managing record counts
         """
+
+        def _get_stdin():
+            self.FNR = 0
+            self.FILENAME = "-"
+            self._FLDS = []
+            self.NF = 0
+            self.BEGINFILE()
+            yield from sys.stdin
+            # self.ENDFILE() now in caller's finally clause
+
         if self.ARGC < 1:
-            yield from self._get_stdin()
+            self._current_input = _get_stdin()
+            try:
+                for line in self._current_input:
+                    yield line
+            except ValueError:
+                pass
+            finally:
+                self.ENDFILE()
         else:
             for name in self.ARGV:
                 if name[0].isalpha() and "=" in name:
                     self._var_on_commandline(name, name)
                 else:
-                    self.FILENAME = name
-                    self._nextfile = False
-                    self.FNR = 0
-                    if self.FILENAME == "-":
-                        yield from self._get_stdin()
-                    else:
-                        self._FLDS = []
-                        self.NF = 0
-                        self.BEGINFILE()
-                        with open(self.FILENAME) as current_file:
-                            for line in current_file:
+                    try:
+                        self.FILENAME = name
+                        self.FNR = 0
+                        if self.FILENAME == "-":
+                            self._current_input = _get_stdin()
+                            for line in self._current_input:
                                 yield line
-                                if self._nextfile:
-                                    current_file.close()
-                                    break
+                        else:
+                            self._FLDS = []
+                            self.NF = 0
+                            self.BEGINFILE()
+                            with open(self.FILENAME) as current_file:
+                                self._current_input = current_file
+                                for line in current_file:
+                                    yield line
+                        try:
+                            self._current_input.close()
+                        except:
+                            pass
+                    except ValueError:
+                        pass
+                    finally:
                         self.ENDFILE()
 
     def _format_g(self, raw_value) -> str:
@@ -487,11 +584,6 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                 self._has_mainloop
             ):  # only process files and run mainloop if it has some statements
                 for line in self._get_lines():
-                    # Can't find how to advance to the next file in the generator
-                    # when reading stdin, so just consume lines. YUCK!
-                    # Possible solution https://stackoverflow.com/questions/3164785/stop-generator-from-within-block-in-python
-                    if self._nextfile:
-                        continue
                     self._set_dollar_fields(line)
                     self.NR += 1
                     self.FNR += 1
@@ -500,13 +592,16 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                     except AwkNext:
                         pass
                     except AwkNextFile:
-                        self._nextfile = True
+                        self._current_input.close()
         except AwkExit:
             pass
         try:
             self.END()
         except AwkExit:
             pass
+
+        for _, file in self._open_files.items():
+            file.close()
         set_exit_code(AwkpyRuntimeWrapper._ans)
         return AwkpyRuntimeWrapper._ans
 
@@ -585,8 +680,9 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         self.ORS = "\n"
         self.CONVFMT = "%.6g"
         self.OFMT = "%.6g"
-        self._nextfile = False
         self.ENVIRON = defaultdict(AwkEmptyVar.instance, os.environ)
+        # files open for input or output
+        self._open_files = {}
         # if no statements are present in the main loop,
         # input files are not processed
         self._has_mainloop = False
