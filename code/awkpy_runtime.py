@@ -377,23 +377,64 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
 
     class FileWrapper:
         def __init__(self, runtime, name: str, mode: str):
-            self.runtime = runtime
+            self.runtime: AwkpyRuntimeWrapper = runtime
             self.name = name
             self.mode = mode
+            self.rc = 1  # success
 
         def open(self):
             pass
 
         def close(self):
-            pass
+            return 0
 
-        def reader(self):
+        def get(self):
             return None
 
-        def writer(self):
+        def print(self, *n, **kw):
             return None
 
-    class FileOutputWrapper(FileWrapper):
+        def get_into_dollar_fields(self):
+            self.runtime._set_dollar_fields(self.get())
+            return self.rc
+
+        def get_into_dollar_field(self, nr):
+            self.runtime._set_dollar_field(nr, self.get())
+            return self.rc
+
+        def get_into_variable(self, var):
+            self.runtime.__setattr__(var, self.get())
+            return self.rc
+
+    class StdInOutWrapper(FileWrapper):
+        """Wraps current input file generator & print"""
+
+        def __init__(self, runtime):
+            super().__init__(runtime, "", "rw")
+            self.file_handle = None
+
+        def open(self):
+            pass  # always open
+
+        def get(self):
+            try:
+                ans = self.runtime._current_input.__next__()
+                if ans == "":
+                    self.rc = 0
+                else:
+                    ans = ans.strip("\n")
+                    self.rc = 1
+            except StopIteration:
+                ans = ""
+                self.rc = 0
+            self.runtime.NR += 1
+            self.runtime.FNR += 1
+            return ans
+
+        def print(self, *n, **kw):
+            print(*n, **kw)
+
+    class FileIOWrapper(FileWrapper):
         def __init__(self, runtime, name: str, mode: str):
             super().__init__(runtime, name, mode)
             self.file_handle = None
@@ -405,8 +446,14 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             self.file_handle.close()
             del self.file_handle
 
-        def writer(self):
-            return self.file_handle
+        def get(self):
+            ans = self.file_handle.readline()
+            self.rc = 0 if len(ans) == 0 else 1
+            return ans.rstrip()
+
+        def print(self, *n, **kw):
+            kw["file"] = self.file_handle
+            print(*n, **kw)
 
     class PipeIOWrapper(FileWrapper):
         def __init__(self, runtime, name: str, mode: str, stdin=None, stdout=None):
@@ -423,11 +470,14 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                 opts["stdin"] = subprocess.PIPE
             self.popen = subprocess.Popen(self.name.split(), encoding="utf-8", **opts)
 
-        def reader(self):
-            return self.popen.stdout
+        def get(self):
+            ans = self.popen.stdout.readline()
+            self.rc = 0 if len(ans) == 0 else 1
+            return ans.rstrip()
 
-        def writer(self):
-            return self.popen.stdin
+        def print(self, *n, **kw):
+            kw["file"] = self.popen.stdin
+            print(*n, **kw)
 
         def close(self):
             if self.popen.stdin:
@@ -448,17 +498,17 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             return self._open_files[name]
         except:
             pass
-        if "|" in mode:  # [">|", "|<", '&|'):
-            if ">" in mode:
+        if "|" in mode:  # ["|r", "|w", '&|'):
+            if mode in ["|w", "|"]:
                 stdin = True
-            if "<" in mode:
+            if mode in ["|r", "|r", "|"]:
                 stdout = True
             if "&" in mode:
                 stdin = True
                 stdout = True
             the_wrapper = self.PipeIOWrapper(self, name, mode, stdin, stdout)
         elif mode in ["w", "a"]:
-            the_wrapper = self.FileOutputWrapper(self, name, mode)
+            the_wrapper = self.FileIOWrapper(self, name, mode)
         the_wrapper.open()
         self._open_files[name] = the_wrapper
         return the_wrapper
@@ -626,7 +676,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         input_field_nr = -1
 
         while awk != "":
-            match = self.sprintf_format_regex.search(awk)
+            match = self._sprintf_format_regex.search(awk)
             if not match:
                 output.append(awk)
                 break
@@ -636,12 +686,12 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                 awk = awk[start:]
                 continue
             token = awk[0:length]
-            if repl := self.sprintf_replacements.get(token, None):
+            if repl := self._sprintf_replacements.get(token, None):
                 output.append(repl)
             elif len(token) < 2:
                 print("Ooops got {0}".format(token))
             else:  # %...[letter]
-                match = self.sprintf_field_regex.findall(token)
+                match = self._sprintf_field_regex.findall(token)
                 if match and len(match) > 0:
                     parameter, flags, width, precision, pftype = match[0]
                     parmtype = AwkPySprintfConversion.all_conversions[pftype]
@@ -701,19 +751,23 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         # awkpy namespace
         #
         self.awkpy__wait_for_pipe_close = 0  # (False)
+
         # files open for input or output
-        self._open_files = {}
+        self._std_in_out = self.StdInOutWrapper(self)
+        self._open_files = {
+            "": self._std_in_out
+        }  # and anything else the awk code opens
         # if no statements are present in the main loop,
         # input files are not processed
         self._has_mainloop = False
         # used by sprintf
-        self.sprintf_require_int = AwkPySprintfConversion.all_conversions["d"]
+        self._sprintf_require_int = AwkPySprintfConversion.all_conversions["d"]
         fieldspec = (
             r"([0-9]*\$)?([-+ 0'#])?([1-9*][0-9]*)?([.][0-9*]+)?([aAcdeEfFgGiosuxX])"
         )
-        self.sprintf_field_regex = re.compile(fieldspec)
-        self.sprintf_format_regex = re.compile(r"([\\%]%)|([{}])|(%" + fieldspec + ")")
-        self.sprintf_replacements = {r"\%": "%", "%%": "%", "{": "{", "}": "}"}
+        self._sprintf_field_regex = re.compile(fieldspec)
+        self._sprintf_format_regex = re.compile(r"([\\%]%)|([{}])|(%" + fieldspec + ")")
+        self._sprintf_replacements = {r"\%": "%", "%%": "%", "{": "{", "}": "}"}
 
 
 def set_exit_code(code):

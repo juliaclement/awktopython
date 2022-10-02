@@ -31,11 +31,11 @@ from helpers import (
     temp_file_name,
     check_arg_parser,
 )
+from awkpy_runtime import AwkpyRuntimeWrapper
 
 
 def test_getline_default(capsys, monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("a\nb\nc"))
-    # compile_run_capsys_assert(capsys, "ac", 'BEGIN {ORS=""} /b/{getline;}{print $1;}')
     compile_run('BEGIN {ORS=""} /b/{getline;}{print $1;}', [])
     captured = capsys.readouterr()
     assert_equal("ac", captured.out)
@@ -43,7 +43,6 @@ def test_getline_default(capsys, monkeypatch):
 
 def test_getline_dollar2(capsys, monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("a b c\nd e f\ng h i"))
-    # compile_run_capsys_assert(capsys, "ac", 'BEGIN {ORS=""} /f/{getline $2;}{print $0;}')
     compile_run('BEGIN {ORS=""} /b/{getline $2; print $0;}', [])
     captured = capsys.readouterr()
     assert_equal("a d e f c", captured.out)
@@ -51,10 +50,14 @@ def test_getline_dollar2(capsys, monkeypatch):
 
 def test_getline_var(capsys, monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("a\nb\nc"))
-    # compile_run_capsys_assert(capsys, "ac", 'BEGIN {ORS=""} /b/{getline;}{print $1;}')
     compile_run('BEGIN {ORS=""} /b/{getline var; print var;}', [])
     captured = capsys.readouterr()
     assert_equal("c", captured.out)
+
+
+def test_getline_pipe(capsys, monkeypatch):
+    compile_run('BEGIN {ORS="";"echo 12"|getline var;exit var;}')
+    assert_equal("12", AwkpyRuntimeWrapper._ans)
 
 
 def test_simple_match(capsys):

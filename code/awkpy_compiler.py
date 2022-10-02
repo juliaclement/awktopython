@@ -917,7 +917,7 @@ class AwkPyCompiler:
             return new_index
 
         while awk != "":
-            match = self.sprintf_format_regex.search(awk)
+            match = self._sprintf_format_regex.search(awk)
             if not match:
                 output.append(awk)
                 break
@@ -927,12 +927,12 @@ class AwkPyCompiler:
                 awk = awk[start:]
                 continue
             token = awk[0:length]
-            if repl := self.sprintf_replacements.get(token, None):
+            if repl := self._sprintf_replacements.get(token, None):
                 output.append(repl)
             elif len(token) < 2:
                 print("Ooops got {0}".format(token))
             else:  # %...[letter]
-                match = self.sprintf_field_regex.findall(token)
+                match = self._sprintf_field_regex.findall(token)
                 # print(rf'{token}->{match}')
                 if match and len(match) > 0:
                     parameter, flags, width, precision, pftype = match[0]
@@ -948,7 +948,7 @@ class AwkPyCompiler:
                         elif width == "*":
                             input_field_nr += 1
                             width_field = permute_field(
-                                input_field_nr, self.sprintf_require_int
+                                input_field_nr, self._sprintf_require_int
                             )
                             width = "{" + str(width_field) + "}"
                         if precision != "":
@@ -956,7 +956,7 @@ class AwkPyCompiler:
                             if precision == "*":
                                 input_field_nr += 1
                                 precision_field = permute_field(
-                                    input_field_nr, self.sprintf_require_int
+                                    input_field_nr, self._sprintf_require_int
                                 )
                                 precision = "{" + str(precision_field) + "}"
                             width += "." + precision
@@ -1072,7 +1072,15 @@ class AwkPyCompiler:
             self.current_token.sym_type not in terminators
             and self.current_token.token not in string_terminators
         ):
-            if self.prior_token.is_operand():
+            if (
+                "|" in self.current_token.token
+                and self.lookahead_token.token == "getline"
+            ):
+                pipe = ans.pop()
+                ans.append(self.compile_getline_function(pipe, terminators))
+            elif self.lookahead_token.token == "getline":
+                ans.append(self.compile_getline_function("", terminators))
+            elif self.prior_token.is_operand():
                 if self.current_token.sym_type == SymType.AMBIGUOUSOPERATOR:
                     self.current_token = self.current_token.binary_op()
                 if self.current_token.sym_type == SymType.LEFT_PAREN:
@@ -1408,9 +1416,18 @@ class AwkPyCompiler:
             self.output_line(f"for {dummy_name} in {generator_name}():")
             self.compile_indented_statement()
 
-    def compile_getline_statement(self):
+    def compile_getline_common(self, pipe, terminator):
+        self._has_mainloop = True  # ref Posix spec. Their rationale unknown to me.
+        if pipe == "":
+            file_mode = "r"
+            file_name = ""
+        else:
+            t = self.current_token.token
+            file_mode = {"<": "|r", "|": "|r"}.get(t, t)
+            file_name = pipe
+            self.advance_token_require(sym_types=[SymType.STATEMENT])
         self.advance_token()
-        if self.current_token.is_terminator():
+        if terminator():
             output = self.syms["$0"]
         elif self.current_token.sym_type in [SymType.VARIABLE, SymType.DOLLAR]:
             output = self.current_token
@@ -1418,35 +1435,41 @@ class AwkPyCompiler:
         else:
             # file or pipe input, not processed for now
             self.syntax_error("variable name")
-        self.output_line(f"try:")
-        if output.token == "$0":
-            self.output_line(
-                rf'    self._set_dollar_fields(self._current_input.__next__().strip("\n"))'
-            )
-            self.output_line(f"except StopIteration:")
-            self.output_line(f'    self._set_dollar_fields("")')
-        elif output.token.startswith("$"):
-            self.output_line(
-                rf'    self._set_dollar_field({output.token[1:]}, self._current_input.__next__().strip("\n"))'
-            )
-            self.output_line(f"except StopIteration:")
-            self.output_line(f'    self._set_dollar_field({output.token[1:]}, "")')
+
+        if file_name == "":
+            result = """self._std_in_out"""
         else:
-            self.output_line(
-                rf'    {output.python_equivalent} = self._current_input.__next__().strip("\n")'
-            )
-            self.output_line(f"except StopIteration:")
-            self.output_line(f'    {output.python_equivalent} = ""')
+            result = rf"""self._access_file( {file_name}, "{file_mode}")"""
+
+        if output.token == "$0":
+            result += rf".get_into_dollar_fields()"
+        elif output.token.startswith("$"):
+            result += rf".get_into_dollar_field({output.token[1:]})"
+        else:
+            result += rf'.get_into_variable("{output.python_equivalent[5:]}")'
+        return result
+
+    def compile_getline_function(self, pipe, terminators):
+        test = lambda: self.current_token.sym_type in terminators
+        output = self.compile_getline_common(pipe, test)
+        return output
+
+    def compile_getline_statement(self, pipe):
+        test = lambda: self.current_token.is_terminator()
+        output = self.compile_getline_common(pipe, test)
+        self.output_line(output)
 
     def compile_print_common(self):
         redirects = [">", ">>", "|"]
         if self.current_token.token in redirects:
-            file_mode = {">": "w", ">>": "a", "|": ">|"}[self.current_token.token]
+            file_mode = {">": "w", ">>": "a", "|": "|w"}.get(
+                self.current_token.token, self.current_token.token
+            )
             self.advance_token()
             file_name = self.current_token.token
             self.advance_token()
             self.output_line(
-                f'file_handle = self._access_file( {file_name}, "{file_mode}").writer()'
+                f'file_handle = self._access_file( {file_name}, "{file_mode}")'
             )
         else:
             file_name = ""
@@ -1466,7 +1489,7 @@ class AwkPyCompiler:
         else:
             ans += ",".join(fields) + ", sep=self.OFS, end=self.ORS"
         if file_name:
-            ans += ", file=file_handle"
+            ans = "file_handle." + ans
         ans += ")"
         self.output_line(ans)
 
@@ -1480,7 +1503,7 @@ class AwkPyCompiler:
         file_name = self.compile_print_common()
         self.consume_terminator()
         if file_name:
-            ans += ", file=file_handle"
+            ans = "file_handle." + ans
         ans += ",end='')"
         self.output_line(ans)
 
@@ -1497,7 +1520,7 @@ class AwkPyCompiler:
         """consume a simple statement or a block"""
         if self.current_token.token == "\n":
             self.advance_token()
-        prog = None
+        prog = ""
         if self.current_token.sym_type == SymType.STATEMENT:
             self.current_token.parse()
         elif self.current_token.sym_type == SymType.LEFT_BRACE:
@@ -1508,8 +1531,15 @@ class AwkPyCompiler:
             SymType.FUNCTION,
             SymType.AMBIGUOUSOPERATOR,
             SymType.UNIOPERATOR,
+            SymType.STRING,
         ]:
             prog = self.compile_expression()
+            if (
+                "|" in self.current_token.token
+                and self.lookahead_token.token == "getline"
+            ):
+                self.compile_getline_statement(pipe=prog)
+                prog = ""
         elif self.current_token.token != "}":
             self.syntax_error("a statement")
         if (
@@ -1517,7 +1547,7 @@ class AwkPyCompiler:
             and self.current_token.consume
         ):
             self.advance_token()
-        if prog:
+        if prog and prog != "":
             self.output_line(prog)
 
     def compile_indented_statement(self):
@@ -1844,49 +1874,59 @@ class AwkPyCompiler:
             Sym("$", SymType.DOLLAR, 2, -1),
             Sym("$0", SymType.DOLLAR, 2, -1, python_equivalent="self._FLDS[0]"),
             # unary operators
-            Sym("--", SymType.UNIOPERATOR, 3, -1),
-            Sym("++", SymType.UNIOPERATOR, 3, -1),
-            Sym("**", SymType.UNIOPERATOR, 4, 4),
-            Sym("^", SymType.UNIOPERATOR, 4, 4, python_equivalent="**"),  # alias for **
-            Sym("!", SymType.UNIOPERATOR, 5, 14, "not"),
-            Sym("*", SymType.BINOPERATOR, 6, 6),
-            Sym("%", SymType.BINOPERATOR, 6, 6),
-            Sym("/", SymType.BINOPERATOR, 6, 6),
+            SymUnaryOperator("--", SymType.UNIOPERATOR, 3, -1),
+            SymUnaryOperator("++", SymType.UNIOPERATOR, 3, -1),
+            SymUnaryOperator("**", SymType.UNIOPERATOR, 4, 4),
+            SymUnaryOperator(
+                "^", SymType.UNIOPERATOR, 4, 4, python_equivalent="**"
+            ),  # alias for **
+            SymUnaryOperator("!", SymType.UNIOPERATOR, 5, 14, "not"),
+            SymBinaryOperator("*", SymType.BINOPERATOR, 6, 6),
+            SymBinaryOperator("%", SymType.BINOPERATOR, 6, 6),
+            SymBinaryOperator("/", SymType.BINOPERATOR, 6, 6),
             SymAmbiguous(
-                Sym("-", SymType.UNIOPERATOR, 5, 5), Sym("-", SymType.BINOPERATOR, 7, 7)
+                SymUnaryOperator("-", SymType.UNIOPERATOR, 5, 5),
+                SymBinaryOperator("-", SymType.BINOPERATOR, 7, 7),
             ),
             SymAmbiguous(
-                Sym("+", SymType.UNIOPERATOR, 5, 5), Sym("+", SymType.BINOPERATOR, 7, 7)
+                SymUnaryOperator("+", SymType.UNIOPERATOR, 5, 5),
+                SymBinaryOperator("+", SymType.BINOPERATOR, 7, 7),
             ),
             #   Sym('', SymType.BINOPERATOR, 8, 5, python_equivalent='+'), # Awk just concatenates, no operator
-            Sym("<", SymType.BINOPERATOR, 9, 14),
-            Sym("<=", SymType.BINOPERATOR, 9, 14),
-            Sym("==", SymType.BINOPERATOR, 9, 14),
-            Sym("!=", SymType.BINOPERATOR, 9, 14),
-            Sym(">", SymType.BINOPERATOR, 9, 14),
-            Sym(">=", SymType.BINOPERATOR, 9, 14),
-            Sym("|", SymType.BINOPERATOR, 9, 9),
-            Sym("&", SymType.BINOPERATOR, 9, 9),
-            Sym("|&", SymType.BINOPERATOR, 9, 9),
-            #   Sym('>>', SymType.BINOPERATOR, 9, ), I/O
+            SymBinaryOperator("<", SymType.BINOPERATOR, 9, 14),
+            SymBinaryOperator("<=", SymType.BINOPERATOR, 9, 14),
+            SymBinaryOperator("==", SymType.BINOPERATOR, 9, 14),
+            SymBinaryOperator("!=", SymType.BINOPERATOR, 9, 14),
+            SymBinaryOperator(">", SymType.BINOPERATOR, 9, 14),
+            SymBinaryOperator(">=", SymType.BINOPERATOR, 9, 14),
+            SymBinaryOperator("|", SymType.BINOPERATOR, 9, 9),
+            SymBinaryOperator("&", SymType.BINOPERATOR, 9, 9),
+            SymBinaryOperator("|&", SymType.BINOPERATOR, 9, 9),
+            SymBinaryOperator(
+                ">>",
+                SymType.BINOPERATOR,
+                9,
+            ),  # I/O
             SymAmbiguous(
-                Sym("~", SymType.UNIOPERATOR, 5, 5),
-                Sym("~", SymType.BINOPERATOR, 15, 15),
+                SymUnaryOperator("~", SymType.UNIOPERATOR, 5, 5),
+                SymBinaryOperator("~", SymType.BINOPERATOR, 15, 15),
             ),
             SymAmbiguous(
-                Sym("!~", SymType.UNIOPERATOR, 5, 5),
-                Sym("!~", SymType.BINOPERATOR, 15, 15),
+                SymUnaryOperator("!~", SymType.UNIOPERATOR, 5, 5),
+                SymBinaryOperator("!~", SymType.BINOPERATOR, 15, 15),
             ),
-            Sym(
+            SymBinaryOperator(
                 "in", SymType.BINOPERATOR, 16, 16
             ),  # ??? is this the same in both languages
-            Sym("+=", SymType.BINOPERATOR, 20, 20),
-            Sym("-=", SymType.BINOPERATOR, 20, 20),
-            Sym("*=", SymType.BINOPERATOR, 20, 20),
-            Sym("/=", SymType.BINOPERATOR, 20, 20),
-            Sym("%=", SymType.BINOPERATOR, 20, 20),
-            Sym(".", -1, 20, 20),  # FIXME, where does this come from?
-            Sym("=", SymType.BINOPERATOR, 20, 20),  # not an operator in Python. c.v. :=
+            SymBinaryOperator("+=", SymType.BINOPERATOR, 20, 20),
+            SymBinaryOperator("-=", SymType.BINOPERATOR, 20, 20),
+            SymBinaryOperator("*=", SymType.BINOPERATOR, 20, 20),
+            SymBinaryOperator("/=", SymType.BINOPERATOR, 20, 20),
+            SymBinaryOperator("%=", SymType.BINOPERATOR, 20, 20),
+            SymBinaryOperator(".", -1, 20, 20),  # FIXME, where does this come from?
+            SymBinaryOperator(
+                "=", SymType.BINOPERATOR, 20, 20
+            ),  # not an operator in Python. c.v. :=
             #
             #   Built-in variables
             #
@@ -1910,8 +1950,6 @@ class AwkPyCompiler:
                 init="0",
             ),
             # To implement ARGIND, CONVFMT, ERRNO, FUNCTAB, OFMT, RLENGTH, RS, RSTART, SUBSEP,SYMTAB
-            # functions = ??
-            # __init__ = ??
             Sym("EndOfInput", SymType.END_OF_INPUT),
         ]:
             self.syms[sym.token] = sym
@@ -1956,8 +1994,9 @@ class AwkPyCompiler:
             SymStatement("do", lambda: self.compile_do_statement()),
             SymStatement("exit", lambda: self.compile_exit_statement()),
             SymStatement("for", lambda: self.compile_for_statement()),
+            Sym("in", SymType.RESERVED_WORD), # Used by for( s in array)
             SymStatement("function", lambda: self.compile_function_def()),
-            SymStatement("getline", lambda: self.compile_getline_statement()),
+            SymStatement("getline", lambda: self.compile_getline_statement("")),
             SymStatement("if", lambda: self.compile_if_statement()),
             Sym("else", SymType.RESERVED_WORD),
             SymStatement(
@@ -1978,10 +2017,6 @@ class AwkPyCompiler:
             SymTerminator("\n", True, True),
             SymTerminator("}", False, False),
             #
-            #   Unimplemented statements
-            #
-            Sym("in", SymType.RESERVED_WORD),
-            #
             #   Non operators
             #
             Sym("BEGIN", SymType.SECTION, 1),
@@ -2001,75 +2036,17 @@ class AwkPyCompiler:
         self.function_section = 6  # ("END")+1
         self.current_token_nr = -1
         # used by compile_sprintf_function_call (sprintf)
-        self.sprintf_require_int = AwkPySprintfConversion.all_conversions["d"]
+        # the _ prefixes are to match the equivalent in the runtime
+        self._sprintf_require_int = AwkPySprintfConversion.all_conversions["d"]
         fieldspec = (
             r"([0-9]*\$)?([-+ 0'#])?([1-9*][0-9]*)?([.][0-9*]+)?([aAcdeEfFgGiosuxX])"
         )
-        self.sprintf_field_regex = re.compile(fieldspec)
-        self.sprintf_format_regex = re.compile(r"([\\%]%)|([{}])|(%" + fieldspec + ")")
-        self.sprintf_replacements = {r"\%": "%", "%%": "%", "{": "{{", "}": "}}"}
+        self._sprintf_field_regex = re.compile(fieldspec)
+        self._sprintf_format_regex = re.compile(r"([\\%]%)|([{}])|(%" + fieldspec + ")")
+        self._sprintf_replacements = {r"\%": "%", "%%": "%", "{": "{{", "}": "}}"}
 
 
 if __name__ == "__main__":
-    source = r"""BEGIN {
-    x="123./456..789.101112"
-    split(x,y,"./")
-    exit y[1]
-    }"""
-    source = r"""BEGIN {
-    a[1]="<>"
-    print a[1] a[1]
-    }"""
-    source = r"""END {
-    OFS="-"
-    l="left";
-    r="right";
-    print l,r
-    }"""
-    source = r"""BEGIN {
-    i=0;
-    t=6;
-    while(t>1) {
-        t-=1;
-        i+=1;
-    }
-    print t":"i
-}"""
-    source = r"""BEGIN {
-    var="start"
-    astr=substr("string",3,1)
-    if( var~astr ) exit 1
-    exit 0
-}"""
-    source = r"""@include "tests/add_1_in_BEGIN.awk"
-    @include "tests/add_1_in_BEGIN.awk"
-    BEGIN {
-    exit a
-}"""
-    source = r"""BEGIN {
-    var="start"
-    arr[0]="zero"
-    arr[1]="one"
-    print "var="var,"arr=" arr[0],arr[1]
-    exit 0
-}"""
-    source = r"""BEGIN {
-    a=7
-    fmt="%d"
-    y=sprintf(fmt,a)
-    exit y
-}"""
-    source = r"""BEGIN {
-    a=0.234
-    y=sprintf("%e",a)
-    exit y
-}"""
-    source = r"""{
-    x=$0
-    nc=gsub(/[aeiou]/,"\&&\&",x)
-    print $0,"->",x," ",nc,"changes"
-}"""
-    source = r"""BEGIN {ORS=""} /b/{getline $2; print $0;}"""
     source = r"""/Line.2/"""
     source = r"""BEGIN {
     var="start"
@@ -2078,18 +2055,24 @@ if __name__ == "__main__":
     print "var="var,"arr=" arr[0],arr[1] >>"test.output"
     exit 0
 }"""
-    tempfile_path = "test_print_to_file.txt"
-    tempfile_name = str(tempfile_path)
-    command = rf'''"/bin/dd of={tempfile_name} bs=1"'''
+    source = r"""BEGIN {ORS=""} /b/{getline;}{print $1;}"""
+
+
+    tempfile_name = "~/Projects/python/awktopython/tests/output/test_print_to_file.txt"
+    command = rf'''"/bin/dd of={tempfile_name}"'''
 
     source = (
-        r"""BEGIN {awkpy::wait_for_pipe_close=1;} $1=="Line.1" {printf "%s", $1 | """
-        + command
-        + """;close("""
-        + command
-        + """);}"""
-    )
-    source = r"""BEGIN {awkpy::wait_for_pipe_close=1;} $1=="Line.1" {printf "%s\\n", $1 | "/bin/dd of=/home/julia/Projects/python/awktopython/tests/output/test_print_to_file.txt";close("/bin/dd of=/home/julia/Projects/python/awktopython/tests/test_print_to_file.txt");}"""
+    """BEGIN {awkpy::wait_for_pipe_close=1;}"""
+    + r"""$1=="Line.1" {print $1 | """
+    + command
+    + r""";} END {close("""
+    + command
+    + """);}"""
+)
+    # ["~/Projects/python/awktopython/tests/lines.txt"]
+
+    source = r"""BEGIN {ORS="";"echo 12"|getline var;exit var;}"""
+
     a = AwkPyCompiler()
     code = a.compile(source)
     print(code)
