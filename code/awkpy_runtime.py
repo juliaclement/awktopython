@@ -567,8 +567,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         if self.ARGC < 1:
             self._current_input = _get_stdin()
             try:
-                for line in self._current_input:
-                    yield line
+                yield from self._current_input
             except ValueError:
                 pass
             finally:
@@ -583,16 +582,14 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                         self.FNR = 0
                         if self.FILENAME == "-":
                             self._current_input = _get_stdin()
-                            for line in self._current_input:
-                                yield line
+                            yield from self._current_input
                         else:
                             self._FLDS = []
                             self.NF = 0
                             self.BEGINFILE()
                             with open(self.FILENAME) as current_file:
                                 self._current_input = current_file
-                                for line in current_file:
-                                    yield line
+                                yield from current_file
                         try:
                             self._current_input.close()
                         except:

@@ -1994,7 +1994,7 @@ class AwkPyCompiler:
             SymStatement("do", lambda: self.compile_do_statement()),
             SymStatement("exit", lambda: self.compile_exit_statement()),
             SymStatement("for", lambda: self.compile_for_statement()),
-            Sym("in", SymType.RESERVED_WORD), # Used by for( s in array)
+            Sym("in", SymType.RESERVED_WORD),  # Used by for( s in array)
             SymStatement("function", lambda: self.compile_function_def()),
             SymStatement("getline", lambda: self.compile_getline_statement("")),
             SymStatement("if", lambda: self.compile_if_statement()),
@@ -2057,18 +2057,17 @@ if __name__ == "__main__":
 }"""
     source = r"""BEGIN {ORS=""} /b/{getline;}{print $1;}"""
 
-
     tempfile_name = "~/Projects/python/awktopython/tests/output/test_print_to_file.txt"
     command = rf'''"/bin/dd of={tempfile_name}"'''
 
     source = (
-    """BEGIN {awkpy::wait_for_pipe_close=1;}"""
-    + r"""$1=="Line.1" {print $1 | """
-    + command
-    + r""";} END {close("""
-    + command
-    + """);}"""
-)
+        """BEGIN {awkpy::wait_for_pipe_close=1;}"""
+        + r"""$1=="Line.1" {print $1 | """
+        + command
+        + r""";} END {close("""
+        + command
+        + """);}"""
+    )
     # ["~/Projects/python/awktopython/tests/lines.txt"]
 
     source = r"""BEGIN {ORS="";"echo 12"|getline var;exit var;}"""
