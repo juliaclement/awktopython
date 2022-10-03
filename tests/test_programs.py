@@ -290,6 +290,21 @@ def test_use_namespace_var_between_files(capsys):
     assert captured.out == "File.1,Line.4\nFile.2,Line.4\n"
 
 
+def test_RS(capsys, monkeypatch):
+    monkeypatch.setattr("sys.stdin", io.StringIO("ab.4 cd.5 ef"))
+    file = str(full_file_name("lines.txt"))
+    awkpy.run(
+        [
+            "awkpy_out",
+            """BEGIN {RS="."; awkpy::support_RS = 1;} $1=="4"{print $2}""",
+            "-",
+            file,
+        ]
+    )
+    captured = capsys.readouterr()
+    assert captured.out == "cd\n--\n"
+
+
 def test_use_stdin_ahead_of_files(capsys, monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("Line.4 ++"))
     file = str(full_file_name("lines.txt"))

@@ -558,14 +558,54 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         Generator to return input lines while managing record counts
         """
 
+        def _read_from_stdin_slow():
+            buffer = sys.stdin.read()
+            next_pos = 0
+            last_pos = len(buffer)
+            try:
+                while next_pos < last_pos:
+                    end = buffer.index(self.RS, next_pos)
+                    yield buffer[next_pos:end]
+                    next_pos = end + 1
+            except GeneratorExit:
+                pass  # return, ending the generator
+            except ValueError:
+                yield buffer[next_pos:]
+                pass  # return, ending the generator
+
         def _get_stdin():
             self.FNR = 0
             self.FILENAME = "-"
             self._FLDS = []
             self.NF = 0
+            if self.awkpy__support_RS == 0:
+                self._current_input = sys.stdin
+            else:
+                self._current_input = _read_from_stdin_slow()
             self.BEGINFILE()
-            yield from sys.stdin
-            # self.ENDFILE() now in caller's finally clause
+            yield from self._current_input
+
+        def _read_from_file_fast():
+            with open(self.FILENAME) as current_file:
+                self._current_input = current_file
+                yield from current_file
+
+        def _read_from_file_slow():
+            with open(self.FILENAME, "r") as current_file:
+                self._current_input = current_file
+                buffer = current_file.read()
+            next_pos = 0
+            last_pos = len(buffer)
+            try:
+                while next_pos < last_pos:
+                    end = buffer.index(self.RS, next_pos)
+                    yield buffer[next_pos:end]
+                    next_pos = end + 1
+            except GeneratorExit:
+                pass  # return, ending the generator
+            except ValueError:
+                yield buffer[next_pos:]
+                pass  # return, ending the generator
 
         if self.ARGC < 1:
             self._current_input = _get_stdin()
@@ -591,13 +631,21 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                             self._FLDS = []
                             self.NF = 0
                             self.BEGINFILE()
-                            with open(self.FILENAME) as current_file:
-                                self._current_input = current_file
-                                yield from current_file
+
+                            if self.awkpy__support_RS == 0:
+                                self._current_input = _read_from_file_fast()
+                            else:
+                                self._current_input = _read_from_file_slow()
+                            yield from self._current_input
                         try:
                             self._current_input.close()
+                            self._current_input = None
                         except:
                             pass
+                    except AwkNextFile:
+                        self._current_input.close()
+                    except GeneratorExit:
+                        self._current_input = None
                     except ValueError:
                         pass
                     finally:
@@ -650,16 +698,26 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             if (
                 self._has_mainloop
             ):  # only process files and run mainloop if it has some statements
-                for line in self._get_lines():
-                    self._set_dollar_fields(line)
-                    self.NR += 1
-                    self.FNR += 1
-                    try:
-                        self.MAINLOOP()
-                    except AwkNext:
-                        pass
-                    except AwkNextFile:
-                        self._current_input.close()
+                line_generator = self._get_lines()
+                process_next_file = True
+                while process_next_file:
+                    process_next_file = False
+                    for line in line_generator:
+                        self._set_dollar_fields(line)
+                        self.NR += 1
+                        self.FNR += 1
+                        try:
+                            self.MAINLOOP()
+                        except AwkNext:
+                            pass
+                        except AwkNextFile:
+                            process_next_file = True
+                            break
+                    if process_next_file:
+                        try:
+                            line_generator.throw(AwkNextFile)
+                        except StopIteration:
+                            pass
         except AwkExit:
             pass
         try:
@@ -748,6 +806,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         self.ORS = "\n"
         self.RLENGTH = AwkEmptyVar.instance
         self.RSTART = AwkEmptyVar.instance
+        self.RS = "\n"
         self.CONVFMT = "%.6g"
         self.OFMT = "%.6g"
         self.ENVIRON = defaultdict(AwkEmptyVar.instance, os.environ)
@@ -755,6 +814,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         # awkpy namespace
         #
         self.awkpy__wait_for_pipe_close = 0  # (False)
+        self.awkpy__support_RS = 1  # (True)
 
         # files open for input or output
         self._std_in_out = self.StdInOutWrapper(self)

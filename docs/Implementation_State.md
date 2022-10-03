@@ -139,7 +139,9 @@ patsplit, strtonum. Unimplemented, uncertain priority
 
 Implemented: ARGC, ARGIND, ARGV, ENVIRON, FILENAME, FNR, FS, NF, NR, OFS, ORS, RLENGTH, RSTART
 
-Not Implemented (priority medium-high) CONVFMT, ERRNO, OFMT, RS, SUBSEP,SYMTAB
+Partially implemented: RS: files & stdin, not getline
+
+Not Implemented (priority medium-high) CONVFMT, ERRNO, OFMT, SUBSEP,SYMTAB
 
 Not implemented, priority (medium-low )FUNCTAB
 

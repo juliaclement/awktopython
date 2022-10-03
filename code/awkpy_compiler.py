@@ -1943,6 +1943,7 @@ class AwkPyCompiler:
             SymVariable("OFMT", built_in=True, scalar=True),
             SymVariable("OFS", built_in=True, scalar=True),
             SymVariable("ORS", built_in=True, scalar=True),
+            SymVariable("RS", built_in=True, scalar=True),
             SymVariable("RLENGTH", built_in=True, scalar=True),
             SymVariable("RSTART", built_in=True, scalar=True),
             SymVariable(
@@ -1950,6 +1951,13 @@ class AwkPyCompiler:
                 built_in=True,
                 scalar=True,
                 python_equivalent="self.awkpy__wait_for_pipe_close",
+                init="0",
+            ),
+            SymVariable(
+                "awkpy::support_RS",
+                built_in=True,
+                scalar=True,
+                python_equivalent="self.awkpy__support_RS",
                 init="0",
             ),
             # To implement CONVFMT, ERRNO, FUNCTAB, RS, SUBSEP,SYMTAB
@@ -2074,6 +2082,7 @@ if __name__ == "__main__":
     # ["~/Projects/python/awktopython/tests/lines.txt"]
 
     source = r"""BEGIN {ORS="";"echo 12"|getline var;exit var;}"""
+    source = r"""BEGINFILE {print "* * * * * ARGIND:", ARGIND ":" FILENAME} {print "FNR:" FNR ":" $0}"""
 
     a = AwkPyCompiler()
     code = a.compile(source)
