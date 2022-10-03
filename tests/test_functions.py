@@ -284,8 +284,36 @@ def test_match_found():
 
 def test_match_not_found():
     compile_run_answer_assert(
-        0,
+        -1,
         """BEGIN { exit match("good",r"[abc]");}""",
+    )
+
+
+def test_match_found_RSTART():
+    compile_run_answer_assert(
+        2,
+        """BEGIN { match("xbad",r"[abcd]");exit RSTART}""",
+    )
+
+
+def test_match_not_found_RSTART():
+    compile_run_answer_assert(
+        -1,
+        """BEGIN { match("good",r"[abc]");exit RSTART}""",
+    )
+
+
+def test_match_found_RLENGTH():
+    compile_run_answer_assert(
+        1,
+        """BEGIN { match("xbad",r"[abcd]");exit RLENGTH}""",
+    )
+
+
+def test_match_not_found_RLENGTH():
+    compile_run_answer_assert(
+        -1,
+        """BEGIN { match("good",r"[abc]");exit RLENGTH}""",
     )
 
 

@@ -1952,7 +1952,7 @@ class AwkPyCompiler:
                 python_equivalent="self.awkpy__wait_for_pipe_close",
                 init="0",
             ),
-            # To implement ARGIND, CONVFMT, ERRNO, FUNCTAB, OFMT, RLENGTH, RS, RSTART, SUBSEP,SYMTAB
+            # To implement CONVFMT, ERRNO, FUNCTAB, RS, SUBSEP,SYMTAB
             Sym("EndOfInput", SymType.END_OF_INPUT),
         ]:
             self.syms[sym.token] = sym

@@ -89,6 +89,10 @@ class AwkPyArgParser:
                 ):  # all remaining args sent to runtime skipping compiler
                     self.runtime_options.extend(args[i:])
                     break
+                elif (curr_arg in "-Wprofile" or curr_arg in "-Wcprofile") and len(
+                    curr_arg
+                ) > 2:
+                    self.runtime_options.append("-Wprofile")
             else:  # input file or AWK program
                 if self.code_found:
                     self.runtime_options.extend(args[i:])

@@ -305,7 +305,7 @@ class AwkpyRuntimeVarOwner:
 
     def _to_array(self, list, offset=1):
         """Python has lists & dicts. AWK only has dict like Arrays"""
-        ans=defaultdict(AwkEmptyVar, enumerate(list,offset))
+        ans = defaultdict(AwkEmptyVar, enumerate(list, offset))
         return ans
 
     def __init__(self):
@@ -361,7 +361,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         match = regex.search(haystack)
         if match:
             start, end = match.regs[0]
-            self.RLENGTH = end-start
+            self.RLENGTH = end - start
             self.RSTART = start + 1
             return self.RSTART
         self.RSTART = self.RLENGTH = -1
@@ -609,7 +609,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         float_str = f"{value}"
         return sci_str if len(sci_str) < len(float_str) else float_str
 
-    def _set_dollar_fields(self, line:str):
+    def _set_dollar_fields(self, line: str):
         """Set $0 to line, recalculate NF, $1..$NF"""
         if self.FS in [" ", ""]:
             line = line.strip(" \t\n\r")
@@ -618,8 +618,8 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             line = line.strip("\n\r")
             FLDS = line.split(self.FS)
         self.NF = len(FLDS)
-        FLDS=[line]+FLDS
-        self._FLDS = defaultdict(AwkEmptyVar, enumerate(FLDS,0))
+        FLDS = [line] + FLDS
+        self._FLDS = defaultdict(AwkEmptyVar, enumerate(FLDS, 0))
 
     def _set_dollar_field(self, nr, value):
         """Set $nr to value, recalculate $0.

@@ -248,6 +248,14 @@ def test_use_stdin_mixed_with_files(capsys, monkeypatch):
     assert captured.out == "--\n++\n"
 
 
+def test_ARGIND(capsys, monkeypatch):
+    monkeypatch.setattr("sys.stdin", io.StringIO("stdin ++"))
+    file = str(full_file_name("lines.txt"))
+    awkpy.run(["awkpy_out", '$1=="stdin"{print ARGIND}', file, file, "-"])
+    captured = capsys.readouterr()
+    assert captured.out == "3\n"
+
+
 def test_use_var_between_files(capsys):
     file = str(full_file_name("lines.txt"))
     awkpy.run(

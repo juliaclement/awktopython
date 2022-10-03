@@ -29,9 +29,13 @@ def run(args):
     arg_parser = AwkPyArgParser(compiler_args, runtime_args, compiler_args)
     arg_parser.parse(args)
     compiler.do_debug = arg_parser.debug
+
+    if "-Wprofile" in runtime_args:
+        run = 'import cProfile\ncProfile.run("runtime._run(sys.argv)")'
+    else:
+        run = "runtime._run(sys.argv)"
     python_source = (
-        compiler.compile(compiler_args)
-        + "\nruntime=AwkPyTranslated()\nruntime._run(sys.argv)\n"
+        compiler.compile(compiler_args) + f"\nruntime=AwkPyTranslated()\n{run}\n"
     )
     if arg_parser.output_file_name:
         with open(arg_parser.output_file_name, "w") as out_file:
