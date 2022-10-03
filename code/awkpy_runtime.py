@@ -360,9 +360,12 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         regex = self._dynamic_regex(regex_str)
         match = regex.search(haystack)
         if match:
-            start, length = match.regs[0]
-            return start + 1
-        return 0
+            start, end = match.regs[0]
+            self.RLENGTH = end-start
+            self.RSTART = start + 1
+            return self.RSTART
+        self.RSTART = self.RLENGTH = -1
+        return -1
 
     def _dynamic_replacement(self, repl: str):
         """Replacement strings in AWK use '&' where Python uses '\1'."""
@@ -574,6 +577,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                 self.ENDFILE()
         else:
             for name in self.ARGV:
+                self.ARGIND += 1
                 if name[0].isalpha() and "=" in name:
                     self._var_on_commandline(name, name)
                 else:
@@ -734,6 +738,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         super().__init__()
         self.ARGC = 0
         self.ARGV = []
+        self.ARGIND = 0
         self.FILENAME = ""
         self.FNR = 0
         self.FS = " "
@@ -741,6 +746,8 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         self.NR = 0
         self.OFS = " "
         self.ORS = "\n"
+        self.RLENGTH = AwkEmptyVar.instance
+        self.RSTART = AwkEmptyVar.instance
         self.CONVFMT = "%.6g"
         self.OFMT = "%.6g"
         self.ENVIRON = defaultdict(AwkEmptyVar.instance, os.environ)

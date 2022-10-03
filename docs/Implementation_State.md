@@ -116,7 +116,7 @@ var=value variable-assignment arguments (since early awk) implemented.
 
 Implemented:  atan2, close, cos, exp, gsub, index, int, length, log, match, rand, srand, sin, split, substr, sqrt, sub, tolower, toupper
 
-getline: partially implemented, from current input file only
+getline: Implemented except for |& (double ended pipes).
 
 Not Implemented: system. High priority.
 
@@ -137,9 +137,9 @@ patsplit, strtonum. Unimplemented, uncertain priority
 
 #### POSIX
 
-Implemented: ARGC, ARGV, ENVIRON, FILENAME, FNR, FS, NF, NR, OFS 
+Implemented: ARGC, ARGIND, ARGV, ENVIRON, FILENAME, FNR, FS, NF, NR, OFS, ORS, RLENGTH, RSTART
 
-Not Implemented (priority medium-high) ARGIND, CONVFMT, ERRNO, OFMT, ORS, RLENGTH, RS, RSTART, SUBSEP,SYMTAB
+Not Implemented (priority medium-high) CONVFMT, ERRNO, OFMT, RS, SUBSEP,SYMTAB
 
 Not implemented, priority (medium-low )FUNCTAB
 

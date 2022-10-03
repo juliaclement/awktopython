@@ -1932,7 +1932,9 @@ class AwkPyCompiler:
             #
             SymVariable("ARGC", built_in=True, scalar=True),
             SymVariable("ARGV", built_in=True, array=True),
+            SymVariable("ARGIND", built_in=True, scalar=True),
             SymVariable("CONVFMT", built_in=True, scalar=True),
+            SymVariable("ENVIRON", built_in=True, array=True),
             SymVariable("FILENAME", built_in=True, scalar=True),
             SymVariable("FNR", built_in=True, scalar=True),
             SymVariable("FS", built_in=True, scalar=True),
@@ -1941,7 +1943,8 @@ class AwkPyCompiler:
             SymVariable("OFMT", built_in=True, scalar=True),
             SymVariable("OFS", built_in=True, scalar=True),
             SymVariable("ORS", built_in=True, scalar=True),
-            SymVariable("ENVIRON", built_in=True, array=True),
+            SymVariable("RLENGTH", built_in=True, scalar=True),
+            SymVariable("RSTART", built_in=True, scalar=True),
             SymVariable(
                 "awkpy::wait_for_pipe_close",
                 built_in=True,
