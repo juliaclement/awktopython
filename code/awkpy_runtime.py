@@ -660,20 +660,44 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         """
         Generators to return input lines from stdin & files
         """
+
         def _get_stdin_slow():
-            buffer = sys.stdin.read()
-            next_pos = 0
+            blocksize=int(self.awkpy__blocksize)
+            buffer = sys.stdin.read(blocksize)
             last_pos = len(buffer)
+            next_pos = 0
             try:
-                while next_pos < last_pos:
-                    end = buffer.index(self.RS, next_pos)
-                    yield buffer[next_pos:end]
+                while last_pos != 0:
+                    try:
+                        while next_pos < last_pos:
+                            end = buffer.index(self.RS, next_pos)
+                            yield buffer[next_pos:end]
+                            next_pos = end + 1
+                    except ValueError:
+                        # record split across blocks, advance
+                        # to next block & continue
+                        residue = buffer[next_pos:]
+                        while residue != '' and len(buffer) > 0:
+                            buffer = sys.stdin.read(blocksize)
+                            last_pos = len(buffer)
+                            end = buffer.find(self.RS)
+                            if end < 0: #not found??? Small buffer?
+                                residue += buffer
+                            else:
+                                yield residue + buffer[:end]
+                                residue = ''
+                                break
+                        if len(residue) > 0:
+                            yield residue
                     next_pos = end + 1
+                    if next_pos == last_pos and len(buffer) > 0:
+                        buffer = sys.stdin.read(blocksize)
+                        last_pos = len(buffer)
+                        next_pos = 0
+
             except GeneratorExit:
                 pass  # return, ending the generator
-            except ValueError:
-                yield buffer[next_pos:]
-                pass  # return, ending the generator
+            pass  # return, ending the generator
 
         def _get_stdin():
             self.FNR = 0
@@ -693,27 +717,51 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                 yield from current_file
 
         def _read_from_file_slow():
+            blocksize=int(self.awkpy__blocksize)
             with open(self.FILENAME, "r") as current_file:
                 self._current_input = current_file
-                buffer = current_file.read()
-            next_pos = 0
-            last_pos = len(buffer)
-            try:
-                while next_pos < last_pos:
-                    end = buffer.index(self.RS, next_pos)
-                    yield buffer[next_pos:end]
-                    next_pos = end + 1
-            except GeneratorExit:
+                buffer = current_file.read(blocksize)
+                last_pos = len(buffer)
+                next_pos = 0
+                try:
+                    while last_pos != 0:
+                        try:
+                            while next_pos < last_pos:
+                                end = buffer.index(self.RS, next_pos)
+                                yield buffer[next_pos:end]
+                                next_pos = end + 1
+                        except ValueError:
+                            # record split across blocks, advance
+                            # to next block & continue
+                            residue = buffer[next_pos:]
+                            while residue != '' and len(buffer) > 0:
+                                buffer = current_file.read(blocksize)
+                                last_pos = len(buffer)
+                                end = buffer.find(self.RS)
+                                if end < 0: #not found??? Small buffer?
+                                    residue += buffer
+                                else:
+                                    yield residue + buffer[:end]
+                                    residue = ''
+                                    break
+                            if len(residue) > 0:
+                                yield residue
+                        next_pos = end + 1
+                        if next_pos == last_pos and len(buffer) > 0:
+                            buffer = current_file.read(blocksize)
+                            last_pos = len(buffer)
+                            next_pos = 0
+
+                except GeneratorExit:
+                    pass  # return, ending the generator
                 pass  # return, ending the generator
-            except ValueError:
-                yield buffer[next_pos:]
-                pass  # return, ending the generator
+
         try:
             self.BEGIN()
             if (
                 self._has_mainloop
             ):  # only process files and run mainloop if it has some statements
-                _, argv = (0, ['-']) if self.ARGC < 1 else (self.ARGC, self.ARGV)
+                _, argv = (0, ["-"]) if self.ARGC < 1 else (self.ARGC, self.ARGV)
                 for name in argv:
                     self.ARGIND += 1
                     if name[0].isalpha() and "=" in name:
@@ -778,6 +826,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         #
         self.awkpy__wait_for_pipe_close = 0  # (False)
         self.awkpy__support_RS = 1  # (True)
+        self.awkpy__blocksize = -1  # (Read whole file)
 
         # files open for input or output
         self._std_in_out = self.StdInOutWrapper(self)

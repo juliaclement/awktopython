@@ -1960,6 +1960,13 @@ class AwkPyCompiler:
                 python_equivalent="self.awkpy__support_RS",
                 init="0",
             ),
+            SymVariable(
+                "awkpy::blocksize",
+                built_in=True,
+                scalar=True,
+                python_equivalent="self.awkpy__blocksize",
+                init="0",
+            ),
             # To implement CONVFMT, ERRNO, FUNCTAB, RS, SUBSEP,SYMTAB
             Sym("EndOfInput", SymType.END_OF_INPUT),
         ]:
