@@ -662,7 +662,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         """
 
         def _get_stdin_slow():
-            blocksize=int(self.awkpy__blocksize)
+            blocksize = int(self.awkpy__blocksize)
             buffer = sys.stdin.read(blocksize)
             last_pos = len(buffer)
             next_pos = 0
@@ -677,15 +677,15 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                         # record split across blocks, advance
                         # to next block & continue
                         residue = buffer[next_pos:]
-                        while residue != '' and len(buffer) > 0:
+                        while residue != "" and len(buffer) > 0:
                             buffer = sys.stdin.read(blocksize)
                             last_pos = len(buffer)
                             end = buffer.find(self.RS)
-                            if end < 0: #not found??? Small buffer?
+                            if end < 0:  # not found??? Small buffer?
                                 residue += buffer
                             else:
                                 yield residue + buffer[:end]
-                                residue = ''
+                                residue = ""
                                 break
                         if len(residue) > 0:
                             yield residue
@@ -717,7 +717,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                 yield from current_file
 
         def _read_from_file_slow():
-            blocksize=int(self.awkpy__blocksize)
+            blocksize = int(self.awkpy__blocksize)
             with open(self.FILENAME, "r") as current_file:
                 self._current_input = current_file
                 buffer = current_file.read(blocksize)
@@ -734,15 +734,15 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                             # record split across blocks, advance
                             # to next block & continue
                             residue = buffer[next_pos:]
-                            while residue != '' and len(buffer) > 0:
+                            while residue != "" and len(buffer) > 0:
                                 buffer = current_file.read(blocksize)
                                 last_pos = len(buffer)
                                 end = buffer.find(self.RS)
-                                if end < 0: #not found??? Small buffer?
+                                if end < 0:  # not found??? Small buffer?
                                     residue += buffer
                                 else:
                                     yield residue + buffer[:end]
-                                    residue = ''
+                                    residue = ""
                                     break
                             if len(residue) > 0:
                                 yield residue

@@ -131,8 +131,9 @@ class SymType(IntEnum):
     COMMA = 20  # Comma
     REGEX = 21  # Regex
     REDIRECT = 22  #
-    STATEMENT_TERMINATOR = 23  # Terminator
-    END_OF_INPUT = 24  # End_Of_Input
+    COMMENT = 23  #
+    STATEMENT_TERMINATOR = 24  # Terminator
+    END_OF_INPUT = 25  # End_Of_Input
 
 
 #   Sym
@@ -186,6 +187,8 @@ class Sym:
             token if python_equivalent is None else python_equivalent
         )
         self.init = init
+        self.comments = []
+        self.line_comment = ""
 
     def is_operator(self):
         return self.sym_type in [
@@ -472,6 +475,7 @@ class AwkPyCompiler:
         while line_nr < len(lines_arr):
             line = lines_arr[line_nr].strip()
             yield f"@@@{line_nr}@@@{line}"
+            first_token = True
             expect_namespace = False
             expect_filename = False
             while line:
@@ -483,6 +487,7 @@ class AwkPyCompiler:
                             continue
                         yield line[:start]
                         line = line[start:]
+                        first_token = False
                         continue
                     token = line[:length]
                     line = line[length:]
@@ -493,9 +498,11 @@ class AwkPyCompiler:
                         token = token.strip('"')
                         AwkNamespace.set_current_namespace(token)
                         yield f'@namespace "{token}"'
+                        first_token = False
                         continue
                     elif token == "@namespace":
                         expect_namespace = True
+                        first_token = False
                         continue
                     # @include also handled early to reduce complexity
                     # in our caller
@@ -523,7 +530,17 @@ class AwkPyCompiler:
                         continue
                     elif token == "@include":
                         expect_filename = True
+                        first_token = False
                         continue
+                    elif token[0] == "#":  # comment until end of line
+                        if first_token:
+                            token = "#^" + token
+                        else:
+                            token = "#$" + token
+                        first_token = False
+                        yield token
+                        continue
+
                     # Because of the ambiguity of detecting them, our regex
                     # has additional characters prepended to regexes.
                     is_prefixed_regex = token[0] in "!~(," and "/" in token
@@ -546,8 +563,10 @@ class AwkPyCompiler:
                         yield toks[0].strip()
                         token = "/" + toks[1]
                     yield token
+                    first_token = False
                 else:
                     yield line
+                    first_token = False
                     break
             yield "\n"
             line_nr += 1
@@ -617,6 +636,13 @@ class AwkPyCompiler:
                     sym = SymRegex(token)
                 elif token == ">>":
                     sym = Sym(token, SymType.REDIRECT, python_equivalent=token)
+                elif token[0] == "#":
+                    orig_token = token[2:]
+                    sym = Sym(orig_token, SymType.COMMENT, python_equivalent=orig_token)
+                    if token[1] == "^":
+                        sym.comments.append(token[2:])
+                    else:
+                        sym.line_comment += token[2:]
                 else:
                     raise NameError(
                         f"Unrecognised token {token} near line {self.lineNr}"
@@ -643,13 +669,27 @@ class AwkPyCompiler:
         self.current_token_nr += 1
         self.current_line = self.lookahead_line
         self.current_token = self.lookahead_token
-        if self.current_token_nr + 1 < len(self.tokens):
+        keep_looking = True
+        while (self.current_token_nr + 1) < len(self.tokens) and (
+            keep_looking
+            or self.lookahead_token.sym_type == SymType.COMMENT
+            or self.lookahead_token.token == "\n "
+        ):
+            keep_looking = False
             self.lookahead_line, self.lookahead_token = self.tokens[
                 self.current_token_nr + 1
             ]
             self.lookahead_token = self.replacement_syms.get(
                 self.lookahead_token.token, self.lookahead_token
             )
+            if self.lookahead_token.token == "\n" and self.current_token.token == "\n":
+                del self.tokens[self.current_token_nr + 1]
+                keep_looking = True
+            elif self.lookahead_token.sym_type == SymType.COMMENT:
+                self.comments.extend(self.lookahead_token.comments)
+                self.line_comment += self.lookahead_token.line_comment
+                del self.tokens[self.current_token_nr + 1]
+                keep_looking = True
 
     def advance_token_require(self, tokens=None, sym_types: list = None):
         """Get the next token, and check it is in a valid list"""
@@ -695,13 +735,26 @@ class AwkPyCompiler:
         self.generated_code[self.current_output] = replacement
         return old_output
 
+    def flush_comments(self):
+        for comment in self.comments:
+            self.generated_code[self.current_output].append(self.indent + comment)
+        self.comments = []
+
     def output_block(self, block):
-        """Used t oreinsert the code removed by end_deferred_output"""
+        """Used to reinsert the code removed by end_deferred_output"""
+        self.flush_comments()
+        # shouldn't have a line comment, but ...
+        if self.line_comment != "" and len(block) > 0:
+            block[0] += " " + self.line_comment
+            self.line_comment = ""
         self.generated_code[self.current_output].extend(block)
 
     def output_line(self, line):
         """Output a single line"""
-        self.generated_code[self.current_output].append(self.indent + line)
+        self.flush_comments()
+        comment = "" if self.line_comment == "" else " " + self.line_comment
+        self.generated_code[self.current_output].append(self.indent + line + comment)
+        self.line_comment = ""
 
     """Expressions & conditions"""
 
@@ -1636,6 +1689,8 @@ class AwkPyCompiler:
         self.current_token_nr = -2
         self.advance_token()
         self.advance_token()
+        self.header_comments = self.comments
+        self.comments = []
         self.indent = "        "
         while (
             self.current_token_nr < len(self.tokens)
@@ -1777,6 +1832,7 @@ class AwkPyCompiler:
             print([t.token for l, t in self.tokens])
         self.required_library_items["collections"]["defaultdict"] = True
         prefix = ["#! /usr/bin/env python3"]
+        prefix.extend(self.header_comments)
         for (
             item
         ) in "AwkpyRuntimeVarOwner,AwkpyRuntimeWrapper,AwkNext,AwkNextFile,AwkExit,AwkEmptyVar,AwkEmptyVarInstance".split(
@@ -1829,6 +1885,9 @@ class AwkPyCompiler:
             [],
             [],
         ]  # __init__, BEGIN, BEGINFILE, MAINLOOP, ENDFILE, END, functions
+        self.comments = []
+        self.header_comments = []
+        self.line_comment = ""
         self.current_output = 3  # body
         self._has_mainloop = False
         """regular expression that should recognise all awk symbols"""
@@ -2091,6 +2150,19 @@ if __name__ == "__main__":
     source = r"""BEGIN {ORS="";"echo 12"|getline var;exit var;}"""
     source = r"""BEGINFILE {print "* * * * * ARGIND:", ARGIND ":" FILENAME} {print "FNR:" FNR ":" $0}"""
 
+    source = r"""
+# Commented source file    
+BEGIN {
+    var="start"
+    arr[0]="zero" # one less than one
+    arr[1]="one"  # is it?
+    #
+    # OK, now print it
+    #
+    print "var="var,"arr=" arr[0],arr[1] >>"test.output" # yes, to a file
+    exit 0
+# The end    
+}"""
     a = AwkPyCompiler()
     code = a.compile(source)
     print(code)
