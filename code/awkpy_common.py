@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """
     AWK to python translator: 
-    Classes common between awkpy.py and awkpycc.py
+    Classes common between awkpy_compiler.py and awkpy_runtime.py
 """
 #
 # Copyright (C) 2022 Julia Ingleby Clement

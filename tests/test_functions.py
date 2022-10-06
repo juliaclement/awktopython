@@ -878,6 +878,27 @@ BEGIN {a="123456"
     )
 
 
+def test_system_call():
+    compile_run_answer_assert(
+        0,
+        """BEGIN { a=system("echo This is a line","A");exit a;}""",
+    )
+
+
+def test_system_callfail():
+    compile_run_answer_assert(
+        -1,
+        """BEGIN { a=system("there_is_no_such_command This is a line","A");exit a;}""",
+    )
+
+
+def test_system_call_assign():
+    compile_run_answer_assert(
+        "This is a line\n",
+        """BEGIN { a=system("echo This is a line","A");exit A;}""",
+    )
+
+
 def test_toupper_function_call():
     compile_run_answer_assert(
         "BANG",

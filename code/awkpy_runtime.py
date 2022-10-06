@@ -18,7 +18,7 @@
 # limitations under the License.
 from ast import Delete
 from functools import lru_cache  # would rather use @cache, but not available until 3.9
-from subprocess import Popen, PIPE, TimeoutExpired
+from subprocess import CompletedProcess, Popen, PIPE, TimeoutExpired
 from collections import defaultdict
 from io import TextIOWrapper
 import sys
@@ -378,6 +378,37 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         repl = repl.replace(chr(1), r"&")
         return repl
 
+    def _system(self, commandline, capture_output=""):
+        opts = {}
+        if capture_output != "":
+            if capture_output[0] == "$":
+                raise ValueError('Can only capture "system" to a normal variable')
+            opts["capture_output"] = capture_output
+        if self.awkpy__local_environ != 0:
+            # need to copy to a fresh dictionary to avoid
+            # ValueError: env cannot contain 'PATH' and b'PATH' keys
+            env = {k: v for k, v in self.ENVIRON.items()}
+            opts["env"] = env
+        try:
+            completedprocess: CompletedProcess = subprocess.run(
+                commandline.split(), encoding="utf-8", **opts
+            )
+        except FileNotFoundError:
+            return -1
+        if capture_output != "":
+            stdout = (
+                ""
+                if completedprocess.stdout == ""
+                else completedprocess.stdout.strip("\n") + "\n"
+            )
+            stderr = (
+                ""
+                if completedprocess.stderr == ""
+                else completedprocess.stderr.strip("\n") + "\n"
+            )
+            self.__setattr__(capture_output, stdout + stderr)
+        return completedprocess.returncode
+
     class FileWrapper:
         def __init__(self, runtime, name: str, mode: str):
             self.runtime: AwkpyRuntimeWrapper = runtime
@@ -471,6 +502,12 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                 opts["stdout"] = subprocess.PIPE
             if self.has_stdin:
                 opts["stdin"] = subprocess.PIPE
+            if self.runtime.awkpy__local_environ != 0:
+                # need to copy to a fresh dictionary to avoid
+                # ValueError: env cannot contain 'PATH' and b'PATH' keys
+                env = {k: v for k, v in self.runtime.ENVIRON.items()}
+                opts["env"] = env
+
             self.popen = subprocess.Popen(self.name.split(), encoding="utf-8", **opts)
 
         def get(self):
@@ -827,6 +864,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         self.awkpy__wait_for_pipe_close = 0  # (False)
         self.awkpy__support_RS = 1  # (True)
         self.awkpy__blocksize = -1  # (Read whole file)
+        self.awkpy__local_environ = 1  # (True)
 
         # files open for input or output
         self._std_in_out = self.StdInOutWrapper(self)

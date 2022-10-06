@@ -26,6 +26,8 @@ python awkpycc.py \[options\] \[awk-program\]
 
 \-f awk-program-file The name of the Awk source code. This option may be used multiple times.
 
+\-F string.	Set the FS (field separator) variable. Implemented by translating into -vFS=string.
+
 \-i awk-include-file The name of an Awk source code file. This is a Gawk extension that is very similar to -f but only includes the file once. Will error if the same file is (both -f and -i) included through both.
 
 \-v variable=value Assign value as the initial value of the named variable before the program, including the BEGIN block if any, is executed.
@@ -35,7 +37,9 @@ Once namespaces are implemented, the variable name may be prefixed with namespac
 \--Stop processing options & treat the rest of the command line as runtime filenames. These are ignored in compile mode, see Compile &
 Execute. They are not passed through to the generated Python.
 
-\-WrStop processing options & treat the rest of the command line as runtime options and filenames. These are ignored in compile mode, see Compile & Execute. They are not passed through to the generated Python.
+\-Wprofile (also -Wcprofile). Compile a call to cProfile into the generated code.
+
+\-Wr Stop processing options & treat the rest of the command line as runtime options and filenames. These are ignored in compile mode, see Compile & Execute. They are not passed through to the generated Python.
 This is an awkpy extension.
 
 Awk-program A quoted string containing the code of the awk program to be compiled. If you prefix it with -e, you can have multiple strings and mix them with awk files.

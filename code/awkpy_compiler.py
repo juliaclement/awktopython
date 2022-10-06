@@ -2026,6 +2026,13 @@ class AwkPyCompiler:
                 python_equivalent="self.awkpy__blocksize",
                 init="0",
             ),
+            SymVariable(
+                "awkpy::local_environ",
+                built_in=True,
+                scalar=True,
+                python_equivalent="self.awkpy__local_environ",
+                init="0",
+            ),
             # To implement CONVFMT, ERRNO, FUNCTAB, RS, SUBSEP,SYMTAB
             Sym("EndOfInput", SymType.END_OF_INPUT),
         ]:
@@ -2056,12 +2063,9 @@ class AwkPyCompiler:
             SymFunction("sqrt", python_equivalent="math.sqrt"),
             SymFunction("sub", lambda t=[]: self.compile_sub_function_call(t)),
             SymFunction("substr", lambda: self.compile_substr_function_call()),
+            SymFunction("system", python_equivalent="self._system"),
             SymFunction("tolower", default_function_method_parser, "lower"),
             SymFunction("toupper", default_function_method_parser, "upper"),
-            #
-            #   Unimplemented functions
-            #
-            Sym("system", SymType.RESERVED_WORD),
             #
             #   Statements
             #
@@ -2147,7 +2151,6 @@ if __name__ == "__main__":
     )
     # ["~/Projects/python/awktopython/tests/lines.txt"]
 
-    source = r"""BEGIN {ORS="";"echo 12"|getline var;exit var;}"""
     source = r"""BEGINFILE {print "* * * * * ARGIND:", ARGIND ":" FILENAME} {print "FNR:" FNR ":" $0}"""
 
     source = r"""
@@ -2163,6 +2166,7 @@ BEGIN {
     exit 0
 # The end    
 }"""
+    source = r"""BEGIN { a=system("echo $PATH");}"""
     a = AwkPyCompiler()
     code = a.compile(source)
     print(code)
