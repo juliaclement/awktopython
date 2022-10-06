@@ -1849,6 +1849,7 @@ class AwkPyCompiler:
             [
                 "class AwkPyTranslated(AwkpyRuntimeWrapper):",
                 "    global AwkEmptyVarInstance",
+                "    global AwkNext",
             ]
         )
         prog = "\n".join(prefix)
@@ -1857,12 +1858,15 @@ class AwkPyCompiler:
             prog += "\n" + "\n".join(self.generated_code[self.function_section])
         fns = [
             "__init__(self)",
-            "BEGIN",
-            "BEGINFILE",
-            "MAINLOOP",
-            "ENDFILE",
-            "END",
+            "awkpy__BEGIN",
+            "awkpy__BEGINFILE",
+            "awkpy__MAINLOOP",
+            "awkpy__ENDFILE",
+            "awkpy__END",
         ]
+        if self._has_mainloop and len(self.generated_code[3]) > 0:
+            self.generated_code[3].insert(0, "      try:")
+            self.generated_code[3].extend(["      except AwkNext:", "        pass"])
         for outputNr in range(6):
             if len(self.generated_code[outputNr]) > 0:
                 fn = fns[outputNr]
@@ -2100,11 +2104,16 @@ class AwkPyCompiler:
             #
             #   Non operators
             #
-            Sym("BEGIN", SymType.SECTION, 1),
-            Sym("BEGINFILE", SymType.SECTION, 2),
-            # body = 3
-            Sym("ENDFILE", SymType.SECTION, 4),
-            Sym("END", SymType.SECTION, 5),
+            Sym("BEGIN", SymType.SECTION, 1, python_equivalent="awkpy__BEGIN"),
+            Sym("BEGINFILE", SymType.SECTION, 2, python_equivalent="awkpy__BEGINFILE"),
+            Sym(
+                "awkpy::MAINLOOP",
+                SymType.SECTION,
+                3,
+                python_equivalent="awkpy__MAINLOOP",
+            ),
+            Sym("ENDFILE", SymType.SECTION, 4, python_equivalent="awkpy__ENDFILE"),
+            Sym("END", SymType.SECTION, 5, python_equivalent="awkpy__END"),
         ]:
             self.syms[sym.token] = sym
             self.reserved_words[sym.token] = sym
@@ -2166,7 +2175,7 @@ BEGIN {
     exit 0
 # The end    
 }"""
-    source = r"""BEGIN { a=system("echo $PATH");}"""
+    source = r"""BEGIN {ORS="";"echo 12"|getline var;exit var;}"""
     a = AwkPyCompiler()
     code = a.compile(source)
     print(code)

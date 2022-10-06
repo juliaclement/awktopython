@@ -16,7 +16,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ast import Delete
 from functools import lru_cache  # would rather use @cache, but not available until 3.9
 from subprocess import CompletedProcess, Popen, PIPE, TimeoutExpired
 from collections import defaultdict
@@ -313,37 +312,41 @@ class AwkpyRuntimeVarOwner:
 
 
 class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
+    """A class that defines the structure & helper routines
+    for the generated Python.
+    Translated programs inherit from this class"""
+
     _ans = 0
 
-    def BEGIN(self):
+    def awkpy__BEGIN(self):
         """
         This method is run before the file input begins.
         It can be used to initialise variables, etc
         """
         pass
 
-    def BEGINFILE(self):
+    def awkpy__BEGINFILE(self):
         """
         This method is run before each file's input begins.
         It can be used to initialise variables, etc per-file
         """
         pass
 
-    def MAINLOOP(self):
+    def awkpy__MAINLOOP(self):
         """
         This method is run once for each input line.
         Typically where most of the processing occurs
         """
         pass
 
-    def ENDFILE(self):
+    def awkpy__ENDFILE(self):
         """
         This method is run after each file's input ends.
         Typically used for any clean-up and printing per-file summaries.
         """
         pass
 
-    def END(self):
+    def awkpy__END(self):
         """
         This method is run after all file input ends.
         Typically used for any clean-up and printing summaries.
@@ -745,7 +748,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                 self._current_input = sys.stdin
             else:
                 self._current_input = _get_stdin_slow()
-            self.BEGINFILE()
+            self.awkpy__BEGINFILE()
             yield from self._current_input
 
         def _read_from_file_fast():
@@ -794,7 +797,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                 pass  # return, ending the generator
 
         try:
-            self.BEGIN()
+            self.awkpy__BEGIN()
             if (
                 self._has_mainloop
             ):  # only process files and run mainloop if it has some statements
@@ -815,23 +818,20 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
                                 self._current_input = _read_from_file_fast()
                             else:
                                 self._current_input = _read_from_file_slow()
-                        self.BEGINFILE()
+                        self.awkpy__BEGINFILE()
                         try:
                             for line in self._current_input:
                                 self._set_dollar_fields(line)
                                 self.NR += 1
                                 self.FNR += 1
-                                try:
-                                    self.MAINLOOP()
-                                except AwkNext:
-                                    pass
+                                self.awkpy__MAINLOOP()
                         except AwkNextFile:
                             pass
-                        self.ENDFILE()
+                        self.awkpy__ENDFILE()
         except AwkExit:
             pass
         try:
-            self.END()
+            self.awkpy__END()
         except AwkExit:
             pass
 
