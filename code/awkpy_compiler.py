@@ -2053,6 +2053,7 @@ class AwkPyCompiler:
             SymFunction("close", python_equivalent="self._close_file"),
             SymFunction("cos", python_equivalent="math.cos"),
             SymFunction("exp", python_equivalent="math.exp"),
+            SymFunction("fflush", python_equivalent="self.awkpy__fflush"),
             SymFunction("gsub", lambda t=[]: self.compile_sub_function_call(t)),
             SymFunction("index", lambda t=[]: self.compile_index_function(t)),
             SymFunction("int", python_equivalent="int"),

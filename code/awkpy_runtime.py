@@ -412,7 +412,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             self.__setattr__(capture_output, stdout + stderr)
         return completedprocess.returncode
 
-    class FileWrapper:
+    class awkpy__FileWrapper:
         def __init__(self, runtime, name: str, mode: str):
             self.runtime: AwkpyRuntimeWrapper = runtime
             self.name = name
@@ -420,6 +420,9 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             self.rc = 1  # success
 
         def open(self):
+            pass
+
+        def fflush(self):
             pass
 
         def close(self):
@@ -443,7 +446,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             self.runtime.__setattr__(var, self.get())
             return self.rc
 
-    class StdInOutWrapper(FileWrapper):
+    class awkpy__StdInOutWrapper(awkpy__FileWrapper):
         """Wraps current input file generator & print"""
 
         def __init__(self, runtime):
@@ -471,7 +474,10 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         def print(self, *n, **kw):
             print(*n, **kw)
 
-    class FileIOWrapper(FileWrapper):
+        def fflush(self):
+            sys.stdout.flush()
+
+    class awkpy__FileIOWrapper(awkpy__FileWrapper):
         def __init__(self, runtime, name: str, mode: str):
             super().__init__(runtime, name, mode)
             self.file_handle = None
@@ -492,7 +498,11 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             kw["file"] = self.file_handle
             print(*n, **kw)
 
-    class PipeIOWrapper(FileWrapper):
+        def fflush(self):
+            if 'w' in self.mode or 'a' in self.mode:
+                self.file_handle.flush()
+
+    class awkpy__PipeIOWrapper(awkpy__FileWrapper):
         def __init__(self, runtime, name: str, mode: str, stdin=None, stdout=None):
             super().__init__(runtime, name, mode)
             self.has_stdin = stdin
@@ -522,6 +532,10 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             kw["file"] = self.popen.stdin
             print(*n, **kw)
 
+        def fflush(self):
+            if self.popen.stdin:
+                self.popen.stdin.flush()
+
         def close(self):
             if self.popen.stdin:
                 self.popen.stdin.close()
@@ -549,9 +563,9 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             if "&" in mode:
                 stdin = True
                 stdout = True
-            the_wrapper = self.PipeIOWrapper(self, name, mode, stdin, stdout)
+            the_wrapper = self.awkpy__PipeIOWrapper(self, name, mode, stdin, stdout)
         elif mode in ["w", "a"]:
-            the_wrapper = self.FileIOWrapper(self, name, mode)
+            the_wrapper = self.awkpy__FileIOWrapper(self, name, mode)
         the_wrapper.open()
         self._open_files[name] = the_wrapper
         return the_wrapper
@@ -563,6 +577,20 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             del self._open_files[name]
         except KeyError:  # already closed?
             pass
+
+    def awkpy__fflush(self, name=''):
+        if name == '':
+            for _, file in self._open_files.items():
+                try:
+                    file.fflush()
+                except KeyError:  # already closed?
+                    pass
+        else:
+            try:
+                the_file = self._open_files[name]
+                the_file.fflush()
+            except KeyError:  # already closed?
+                pass
 
     def _var_on_commandline(self, opt, arg):
         """implements command line [-v] var=val"""
@@ -867,7 +895,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         self.awkpy__local_environ = 1  # (True)
 
         # files open for input or output
-        self._std_in_out = self.StdInOutWrapper(self)
+        self._std_in_out = self.awkpy__StdInOutWrapper(self)
         self._open_files = {
             "": self._std_in_out
         }  # and anything else the awk code opens

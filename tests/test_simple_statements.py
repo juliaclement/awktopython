@@ -162,6 +162,48 @@ def test_printf_to_pipe(capsys, tmp_path):
     assert_equal("Line.1\n", retrieved)
 
 
+def test_printf_to_pipe_with_fflush(capsys, tmp_path):
+    """check that pipe to shell process works"""
+    tempfile_path = temp_file_name(tmp_path, "test_print_to_file.txt")
+    tempfile_name = str(tempfile_path)
+    command = rf'''"/bin/dd of={tempfile_name}"'''
+
+    ans = compile_run_capsys_return(
+        capsys,
+        r"""BEGIN {awkpy::wait_for_pipe_close=1;}"""
+        + r"""$1=="Line.1" {printf "%s\n", $1 | """
+        + command
+        + r""";} END {fflush("""
+        + command
+        + r"""); close("""
+        + command
+        + """);}""",
+        [full_file_name("lines.txt")],
+    )
+    retrieved = tempfile_path.read_text(encoding="utf-8")
+    assert_equal("Line.1\n", retrieved)
+
+
+def test_printf_to_pipe_with_fflush_all(capsys, tmp_path):
+    """check that pipe to shell process works"""
+    tempfile_path = temp_file_name(tmp_path, "test_print_to_file.txt")
+    tempfile_name = str(tempfile_path)
+    command = rf'''"/bin/dd of={tempfile_name}"'''
+
+    ans = compile_run_capsys_return(
+        capsys,
+        r"""BEGIN {awkpy::wait_for_pipe_close=1;}"""
+        + r"""$1=="Line.1" {printf "%s\n", $1 | """
+        + command
+        + r""";} END {fflush(""); close("""
+        + command
+        + """);}""",
+        [full_file_name("lines.txt")],
+    )
+    retrieved = tempfile_path.read_text(encoding="utf-8")
+    assert_equal("Line.1\n", retrieved)
+
+
 def test_print_to_file_overwrite(capsys, tmp_path):
     """check that the earlier output to the file is overwritten"""
     tempfile_path = temp_file_name(tmp_path, "test_print_to_file.txt")
@@ -173,6 +215,46 @@ def test_print_to_file_overwrite(capsys, tmp_path):
         r'''$1=="Line.1" {printf "%s", $1 > "'''
         + tempfile_name
         + '''";close("'''
+        + tempfile_name
+        + """");}""",
+        [full_file_name("lines.txt")],
+    )
+    retrieved = tempfile_path.read_text(encoding="utf-8")
+    assert_equal("Line.1", retrieved)
+
+
+def test_print_to_file_overwrite_with_fflush(capsys, tmp_path):
+    """check that the earlier output to the file is overwritten"""
+    tempfile_path = temp_file_name(tmp_path, "test_print_to_file.txt")
+    tempfile_path.write_text("Prefix")
+    tempfile_name = str(tempfile_path)
+
+    ans = compile_run_capsys_return(
+        capsys,
+        r'''$1=="Line.1" {printf "%s", $1 > "'''
+        + tempfile_name
+        + '''";fflush("'''
+        + tempfile_name
+        + r'''"); close("'''
+        + tempfile_name
+        + """");}""",
+        [full_file_name("lines.txt")],
+    )
+    retrieved = tempfile_path.read_text(encoding="utf-8")
+    assert_equal("Line.1", retrieved)
+
+
+def test_print_to_file_overwrite_with_fflush_all(capsys, tmp_path):
+    """check that the earlier output to the file is overwritten"""
+    tempfile_path = temp_file_name(tmp_path, "test_print_to_file.txt")
+    tempfile_path.write_text("Prefix")
+    tempfile_name = str(tempfile_path)
+
+    ans = compile_run_capsys_return(
+        capsys,
+        r'''$1=="Line.1" {printf "%s", $1 > "'''
+        + tempfile_name
+        + '''";fflush(); close("'''
         + tempfile_name
         + """");}""",
         [full_file_name("lines.txt")],
