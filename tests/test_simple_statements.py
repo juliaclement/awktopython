@@ -302,14 +302,16 @@ def test_delete_array_element(capsys):
 def test_print_fields(capsys):
     compile_run_capsys_assert(
         capsys,
-        "1>>B>>C<<",
+        "1>>B>>C>>1.40<<",
         """BEGIN {
+            OFMT="%-4.2f"
             OFS=">>"
             ORS="<<"
             a=1
             b="B"
             c[1]="C"
-            print a,b,c[1]
+            d=1.4
+            print a,b,c[1],d
         }""",
         [full_file_name("lines.txt")],
     )

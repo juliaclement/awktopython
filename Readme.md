@@ -22,7 +22,7 @@ python awkpycc.py \[options\] \[awk-program\]
 
 \-d Turn on some (not often very useful) debugging information on internal compiler data
 
-\-e awk-program-string Awk source code. Normally when awk code is on the command line, it is the only awk source. -e allows awk code in files and on the command line to be merged into a single Python program.
+\-e awk-program-string Awk source code. Normally when awk code is on the command line, it is the only awk source. -e allows awk code in files and on the command line to be merged into a single Python program. This option may be used multiple times.
 
 \-f awk-program-file The name of the Awk source code. This option may be used multiple times.
 

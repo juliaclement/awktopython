@@ -1200,11 +1200,15 @@ class AwkPyCompiler:
                         lhs = ans.pop()
                         while lhs[0] in ".[":  # rejoin array lookups
                             lhs = ans.pop() + lhs
+                        if lhs[0] != '"':
+                            lhs = f"str({lhs})"
                         if self.lookahead_token.sym_type == SymType.LEFT_BRACKET:
                             rhs = self.compile_expression(extra_terminators)
                         else:
                             rhs = self.current_token.python_equivalent
-                        ans.append(f"(str({lhs})+str({rhs}))")
+                        if rhs[0] != '"':
+                            rhs = f"str({rhs})"
+                        ans.append(f"({lhs}+{rhs})")
                     if not self.current_token.sym_type in terminators:
                         self.advance_token()
                 else:
@@ -1540,6 +1544,17 @@ class AwkPyCompiler:
         if len(fields) == 0:  # print; == print $0;
             ans += "self._FLDS[0]"
         else:
+            for i in range(len(fields)):
+                fld = fields[i]
+                if len(fld) > 1:
+                    if (
+                        fld.startswith('"')
+                        or fld.startswith('("')
+                        or fld.startswith("str(")
+                        or fld.startswith("str(")
+                    ):
+                        continue
+                    fields[i] = f"self.awkpy__to_string({fld})"
             ans += ",".join(fields) + ", sep=self.OFS, end=self.ORS"
         if file_name:
             ans = "file_handle." + ans
@@ -2037,6 +2052,7 @@ class AwkPyCompiler:
                 python_equivalent="self.awkpy__local_environ",
                 init="0",
             ),
+            SymFunction("awkpy::to_string", python_equivalent="self.awkpy__to_string"),
             # To implement CONVFMT, ERRNO, FUNCTAB, RS, SUBSEP,SYMTAB
             Sym("EndOfInput", SymType.END_OF_INPUT),
         ]:
@@ -2176,7 +2192,16 @@ BEGIN {
     exit 0
 # The end    
 }"""
-    source = r"""BEGIN {ORS="";"echo 12"|getline var;exit var;}"""
+    source = r"""BEGIN {
+            OFMT="%-4.2f"
+            OFS=">>"
+            ORS="<<"
+            a=1
+            b="B"
+            c[1]="C"
+            d=1.4
+            print a,b,c[1],d
+        }"""
     a = AwkPyCompiler()
     code = a.compile(source)
     print(code)

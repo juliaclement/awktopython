@@ -499,7 +499,7 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
             print(*n, **kw)
 
         def fflush(self):
-            if 'w' in self.mode or 'a' in self.mode:
+            if "w" in self.mode or "a" in self.mode:
                 self.file_handle.flush()
 
     class awkpy__PipeIOWrapper(awkpy__FileWrapper):
@@ -578,8 +578,8 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         except KeyError:  # already closed?
             pass
 
-    def awkpy__fflush(self, name=''):
-        if name == '':
+    def awkpy__fflush(self, name=""):
+        if name == "":
             for _, file in self._open_files.items():
                 try:
                     file.fflush()
@@ -626,6 +626,17 @@ class AwkpyRuntimeWrapper(AwkpyRuntimeVarOwner):
         sci_str = f"{value:e}"
         float_str = f"{value}"
         return sci_str if len(sci_str) < len(float_str) else float_str
+
+    def awkpy__to_string(self, val, format=None):
+        """Perform sprint like conversion using OFMT.
+        NB: Not a very clever implementation, pass floats off to sprintf"""
+        if isinstance(val, str):
+            return val
+        if isinstance(val, int):
+            return str(val)
+        if format is None:
+            format = self.OFMT
+        return self.sprintf(format, val)
 
     def _set_dollar_fields(self, line: str):
         """Set $0 to line, recalculate NF, $1..$NF"""

@@ -47,7 +47,7 @@ the lexer & symbol table.
 
 A missing pattern shall match any record of input, and a missing action shall be equivalent to: { print }”
 
-Omitted patterns are fully implemented. Omitted action is planned, but medium to low priority.
+Omitted patterns & actions are fully implemented.
 
 ### Statements
 
@@ -108,7 +108,7 @@ var=value variable-assignment arguments (since early awk) implemented.
 
 ### Environment Variables
 
-**ENVIRON** Read implemented by copying to a local dict during start-up. No reverse copy provided, required before creating the ability to execute external programs, medium priority.
+**ENVIRON** Read implemented by copying to a local dict during start-up. Reverse copy provided when opening a pipe or using "system" call.
 
 ### Built-in Functions
 
@@ -135,11 +135,11 @@ patsplit, strtonum. Unimplemented, uncertain priority
 
 #### POSIX
 
-Implemented: ARGC, ARGIND, ARGV, ENVIRON, FILENAME, FNR, FS, NF, NR, OFS, ORS, RLENGTH, RSTART
+Implemented: ARGC, ARGIND, ARGV, ENVIRON, FILENAME, FNR, FS, NF, NR, OFMT, OFS, ORS, RLENGTH, RSTART
 
 Partially implemented: RS: files & stdin, not getline
 
-Not Implemented (priority medium-high) CONVFMT, ERRNO, OFMT, SUBSEP,SYMTAB
+Not Implemented (priority medium-high) CONVFMT, ERRNO, SUBSEP,SYMTAB
 
 Not implemented, priority (medium-low )FUNCTAB
 
